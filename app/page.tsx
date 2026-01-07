@@ -20,16 +20,36 @@ declare global {
 export default function Page() {
   const players = useRef<any[]>([])
   const [streams, setStreams] = useState<Streamer[]>([])
+  const [order, setOrder] = useState<string[]>([])
 
-  /* 🔒 ABSOLUTE RULE:
-     must be live AND have liveVideoId */
   const liveStreams = streams.filter(
     s => s.isLive && !!s.liveVideoId
   )
 
   const visibleStreams = liveStreams
     .filter(s => s.enabled)
-    .slice(0, 12) // max 12, hard stop
+    .slice(0, 12)
+
+
+  /* ================= SYNC ORDER ================= */
+  useEffect(() => {
+    const liveIds = visibleStreams.map(s => s.channelId)
+
+    setOrder(prev => {
+      if (
+        prev.length === liveIds.length &&
+        prev.every((id, i) => id === liveIds[i])
+      ) {
+        return prev
+      }
+
+      const kept = prev.filter(id => liveIds.includes(id))
+      const added = liveIds.filter(id => !kept.includes(id))
+
+      return [...kept, ...added]
+    })
+  }, [visibleStreams.map(s => s.channelId).join(",")])
+
 
   /* ================= LOAD CACHE ================= */
   useEffect(() => {
@@ -77,29 +97,40 @@ export default function Page() {
   useEffect(() => {
     if (!visibleStreams.length) return
 
-    if (!window.YT || !window.YT.Player) {
+    // 🔥 FULL RESET — NO BLACK SCREENS
+    players.current.forEach(p => p?.destroy?.())
+    players.current = []
+
+    const init = () => {
+      visibleStreams.forEach((s, i) => {
+        players.current[i] = new window.YT.Player(
+          `player-${s.channelId}`,
+          {
+            videoId: s.liveVideoId,
+            playerVars: {
+              autoplay: 1,
+              playsinline: 1,
+            },
+          }
+        )
+      })
+    }
+
+    if (window.YT && window.YT.Player) {
+      setTimeout(init, 0) // 🔑 DOM SAFE
+    } else {
       const tag = document.createElement("script")
       tag.src = "https://www.youtube.com/iframe_api"
       document.body.appendChild(tag)
-
-      window.onYouTubeIframeAPIReady = () => initPlayers()
-      return
+      window.onYouTubeIframeAPIReady = () => setTimeout(init, 0)
     }
 
-    initPlayers()
-
-    function initPlayers() {
-      visibleStreams.forEach((s, i) => {
-        const id = `player-${i}`
-
-        if (players.current[i]) return
-
-        players.current[i] = new window.YT.Player(id, {
-          videoId: s.liveVideoId,
-        })
-      })
+    return () => {
+      players.current.forEach(p => p?.destroy?.())
+      players.current = []
     }
-  }, [visibleStreams.map(s => s.liveVideoId).join(",")])
+  }, [visibleStreams.map(s => s.channelId).join(",")])
+
 
 
   /* ================= SAVE STATE ================= */
@@ -130,14 +161,41 @@ export default function Page() {
       </header>
 
       <main className={`grid grid-${visibleStreams.length}`}>
-        {visibleStreams.map((s, i) => (
-          <div key={s.channelId} className="card">
-            <div className="player">
-              <div id={`player-${i}`} />
+        {order
+          .map(id => visibleStreams.find(s => s.channelId === id))
+          .filter((s): s is Streamer => Boolean(s))
+          .map(s => (
+            <div
+              key={s.channelId}
+              className="card"
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData("id", s.channelId)
+              }}
+              onDragOver={(e) => {
+                e.preventDefault()
+              }}
+              onDrop={(e) => {
+                const from = e.dataTransfer.getData("id")
+                const to = s.channelId
+                if (from === to) return
+
+                setOrder(prev => {
+                  const next = [...prev]
+                  const fromIdx = next.indexOf(from)
+                  const toIdx = next.indexOf(to)
+                  next.splice(fromIdx, 1)
+                  next.splice(toIdx, 0, from)
+                  return next
+                })
+              }}
+            >
+              <div className="player">
+                <div id={`player-${s.channelId}`} />
+              </div>
+              <span className="label">{s.name}</span>
             </div>
-            <span className="label">{s.name}</span>
-          </div>
-        ))}
+          ))}
       </main>
 
       <footer className="offline-bar">
