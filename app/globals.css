@@ -1,0 +1,298 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #050507;
+  color: #e5e5e5;
+  font-family: Inter, sans-serif;
+}
+
+.app {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: 52px 1fr auto;
+}
+
+/* ================= HEADER ================= */
+
+
+.header {
+  height: 52px;
+  background: #0f0f13;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: auto;
+  cursor: default;
+}
+
+.logo {
+  height: 28px;
+  width: auto;
+}
+
+.header h1 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.live-count {
+  font-size: 13px;
+  color: #ccc;
+}
+
+
+/* ================= GRID ================= */
+
+main.grid {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  overflow: auto;
+  align-items: stretch;
+}
+
+/* grid rules */
+.grid-1 {
+  grid-template-columns: 1fr;
+}
+
+.grid-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.grid-3,
+.grid-4 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.grid-5,
+.grid-6 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.grid-7,
+.grid-8,
+.grid-9 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.grid-10,
+.grid-11,
+.grid-12 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.grid-13,
+.grid-14,
+.grid-15,
+.grid-16 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+/* ================= CARD ================= */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  background: #0b0b0d;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+/* Aspect-ratio lock */
+.player {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.player iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+/* ================= LABEL ================= */
+
+.label {
+  position: absolute;
+  bottom: 6px;
+  left: 8px;
+  z-index: 2;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 2px 6px;
+  font-size: 12px;
+  border-radius: 4px;
+}
+
+.label::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  background: red;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 4px;
+  animation: pulse 1.2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1
+  }
+
+  50% {
+    opacity: 0.4
+  }
+
+  100% {
+    opacity: 1
+  }
+}
+
+
+/* ================= OFFLINE BAR ================= */
+
+.offline-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  padding: 6px 12px;
+  background: #0f0f13;
+
+  height: auto;
+  min-height: 40px;
+}
+
+.offline-pill {
+  background: #1b1b23;
+  color: #777;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* =================  TOGGGLE ================= */
+.stream-toggle {
+  display: flex;
+  gap: 12px;
+  padding: 6px 12px;
+  background: #0f0f13;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  overflow-x: auto;
+}
+
+.toggle-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #ccc;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.toggle-item input {
+  accent-color: #e11d48;
+  cursor: pointer;
+}
+
+.toggle-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+/* LIVE */
+.toggle-pill.live.enabled {
+  background: #1b1b23;
+  color: #fff;
+}
+
+.toggle-pill.live.disabled {
+  background: #0f0f13;
+  color: #777;
+  opacity: 0.6;
+}
+
+/* OFFLINE */
+.toggle-pill.offline {
+  background: #0f0f13;
+  color: #555;
+  cursor: not-allowed;
+}
+
+/* DOT */
+.toggle-pill .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.toggle-pill.live .dot {
+  background: red;
+}
+
+.toggle-pill.offline .dot {
+  background: #555;
+}
+
+/* Hover (live only) */
+.toggle-pill.live:hover {
+  background: #262633;
+}
+
+/* ================= GROUPED FOOTER ================= */
+
+.grouped-footer {
+  flex-direction: column;
+  align-items: stretch;
+  height: auto;
+  padding: 6px 12px;
+  gap: 6px;
+}
+
+/* ONE ROW PER GROUP */
+.group-row {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+/* GROUP NAME */
+.group-label {
+  font-size: 11px;
+  color: #888;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* STREAMERS INLINE, NO SCROLL */
+.group-streams {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  /* 🔥 IMPORTANT */
+}
