@@ -51,6 +51,42 @@ body {
   color: #ccc;
 }
 
+/* ================= CONTENT LAYOUT ================= */
+
+.content {
+  display: grid;
+  flex: 1;
+  grid-template-columns: 1fr;
+  height: 100%;
+}
+
+.content.focus {
+  display: grid;
+  grid-template-columns: 1fr 350px;
+  grid-template-rows: 1fr;
+  height: calc(100vh - 52px - 80px);
+  overflow: hidden;
+}
+
+.content.focus main.grid {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 8px;
+  gap: 8px;
+  height: 100%;
+}
+
+.content.focus .chat-panel {
+  grid-column: 2 / 3;
+  grid-row: 1 / 2;
+}
+
+.content.focus .bottom-strip {
+  grid-column: 1 / -1;
+  grid-row: 2 / 3;
+}
+
 
 /* ================= GRID ================= */
 
@@ -62,25 +98,18 @@ main.grid {
   align-items: stretch;
 }
 
-/* grid rules */
 .grid-1 {
   grid-template-columns: 1fr;
 }
 
-.grid-2 {
-  grid-template-columns: repeat(2, 1fr);
-}
-
+.grid-2,
 .grid-3,
 .grid-4 {
   grid-template-columns: repeat(2, 1fr);
 }
 
 .grid-5,
-.grid-6 {
-  grid-template-columns: repeat(3, 1fr);
-}
-
+.grid-6,
 .grid-7,
 .grid-8,
 .grid-9 {
@@ -89,15 +118,16 @@ main.grid {
 
 .grid-10,
 .grid-11,
-.grid-12 {
-  grid-template-columns: repeat(4, 1fr);
-}
-
+.grid-12,
 .grid-13,
 .grid-14,
 .grid-15,
 .grid-16 {
   grid-template-columns: repeat(4, 1fr);
+}
+
+.focus-grid {
+  grid-template-columns: repeat(2, 1fr);
 }
 
 /* ================= CARD ================= */
@@ -112,7 +142,6 @@ main.grid {
   width: 100%;
 }
 
-/* Aspect-ratio lock */
 .player {
   position: relative;
   width: 100%;
@@ -129,13 +158,15 @@ main.grid {
 
 .label {
   position: absolute;
-  bottom: 6px;
+  bottom: 50px;
   left: 8px;
   z-index: 2;
   background: rgba(0, 0, 0, 0.6);
   padding: 2px 6px;
   font-size: 12px;
   border-radius: 4px;
+  pointer-events: auto;
+  transition: all 0.2s;
 }
 
 .label::before {
@@ -162,7 +193,6 @@ main.grid {
     opacity: 1
   }
 }
-
 
 /* ================= OFFLINE BAR ================= */
 
@@ -224,7 +254,6 @@ main.grid {
   transition: background 0.15s, opacity 0.15s;
 }
 
-/* LIVE */
 .toggle-pill.live.enabled {
   background: #1b1b23;
   color: #fff;
@@ -236,14 +265,12 @@ main.grid {
   opacity: 0.6;
 }
 
-/* OFFLINE */
 .toggle-pill.offline {
   background: #0f0f13;
   color: #555;
-  cursor: not-allowed;
+  /* cursor: not-allowed; */
 }
 
-/* DOT */
 .toggle-pill .dot {
   width: 6px;
   height: 6px;
@@ -258,9 +285,99 @@ main.grid {
   background: #555;
 }
 
-/* Hover (live only) */
 .toggle-pill.live:hover {
   background: #262633;
+}
+
+/* ================= FOCUS MODE ================= */
+.grid.focus {
+  display: grid;
+  grid-template-areas:
+    "main"
+    "strip";
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr 160px;
+  grid-column: 1 / 2;
+  grid-row: 1 / 2;
+  gap: 10px;
+}
+
+.card.focused {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+}
+
+.card.unfocused {
+  width: 240px;
+  height: 100%;
+  flex-shrink: 0;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: border 0.2s;
+}
+
+.card.unfocused:hover {
+  border-color: transparent;
+}
+
+.label:hover {
+  cursor: pointer;
+  background: rgba(80, 80, 87, 0.9);
+  outline: 2px solid #f7f8fa;
+  border-radius: 4px;
+}
+
+.card.unfocused .label {
+  bottom: 8px;
+}
+
+.unfocused-container {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  overflow-x: auto;
+  min-height: 160px;
+  flex-shrink: 0;
+  padding-bottom: 5px;
+}
+
+/* ================= CHAT PANEL ================= */
+
+.chat-panel {
+  grid-column: 2 / 3;
+  grid-row: 1 / 3;
+  background: #0b0b0d;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  height: 100%;
+}
+
+.chat-panel iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+/* ================= BOTTOM STRIP ================= */
+
+.bottom-strip {
+  grid-column: 1 / 2;
+  grid-row: 2 / 3;
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  padding: 5px;
+  overflow-x: auto;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.card.small {
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+.card.small:hover {
+  opacity: 1;
 }
 
 /* ================= GROUPED FOOTER ================= */
@@ -273,7 +390,6 @@ main.grid {
   gap: 6px;
 }
 
-/* ONE ROW PER GROUP */
 .group-row {
   display: grid;
   grid-template-columns: 40px 1fr;
@@ -281,7 +397,6 @@ main.grid {
   gap: 8px;
 }
 
-/* GROUP NAME */
 .group-label {
   font-size: 11px;
   color: #888;
@@ -289,10 +404,8 @@ main.grid {
   white-space: nowrap;
 }
 
-/* STREAMERS INLINE, NO SCROLL */
 .group-streams {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  /* 🔥 IMPORTANT */
 }

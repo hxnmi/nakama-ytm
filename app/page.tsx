@@ -21,6 +21,7 @@ export default function Page() {
   const players = useRef<any[]>([])
   const [streams, setStreams] = useState<Streamer[]>([])
   const [order, setOrder] = useState<string[]>([])
+  const [focusedId, setFocusedId] = useState<string | null>(null)
 
   const liveStreams = streams.filter(
     s => s.isLive && !!s.liveVideoId
@@ -53,12 +54,15 @@ export default function Page() {
 
   /* ================= LOAD CACHE ================= */
   useEffect(() => {
-    const saved = localStorage.getItem("streamToggles")
-    if (saved) {
-      try {
-        setStreams(JSON.parse(saved))
-      } catch { }
-    }
+    const saved = localStorage.getItem("layoutState")
+    if (!saved) return
+
+    try {
+      const parsed = JSON.parse(saved)
+      setStreams(parsed.streams ?? [])
+      setOrder(parsed.order ?? [])
+      setFocusedId(parsed.focusedId ?? null)
+    } catch { }
   }, [])
 
   /* ================= FETCH LIVE STATUS ================= */
@@ -94,49 +98,64 @@ export default function Page() {
   }, [])
 
   /* ================= YOUTUBE PLAYERS ================= */
+  const streamKeys = visibleStreams.map(s => s.channelId).join(",");
   useEffect(() => {
-    if (!visibleStreams.length) return
+    if (!visibleStreams.length) return;
 
-    // 🔥 FULL RESET — NO BLACK SCREENS
-    players.current.forEach(p => p?.destroy?.())
-    players.current = []
+    players.current.forEach(p => {
+      try { p?.destroy?.(); } catch (e) { console.error("YT Destroy Error:", e); }
+    });
+    players.current = [];
 
     const init = () => {
       visibleStreams.forEach((s, i) => {
-        players.current[i] = new window.YT.Player(
-          `player-${s.channelId}`,
-          {
+        const elementId = `player-${s.channelId}`;
+        if (document.getElementById(elementId)) {
+          players.current[i] = new window.YT.Player(elementId, {
             videoId: s.liveVideoId,
             playerVars: {
               autoplay: 1,
               playsinline: 1,
+              mute: focusedId ? (s.channelId !== focusedId) : false
             },
-          }
-        )
-      })
-    }
+          });
+        }
+      });
+    };
 
     if (window.YT && window.YT.Player) {
-      setTimeout(init, 0) // 🔑 DOM SAFE
+      const t = setTimeout(init, 50);
+      return () => clearTimeout(t);
     } else {
-      const tag = document.createElement("script")
-      tag.src = "https://www.youtube.com/iframe_api"
-      document.body.appendChild(tag)
-      window.onYouTubeIframeAPIReady = () => setTimeout(init, 0)
+      window.onYouTubeIframeAPIReady = () => setTimeout(init, 50);
     }
 
     return () => {
-      players.current.forEach(p => p?.destroy?.())
-      players.current = []
-    }
-  }, [visibleStreams.map(s => s.channelId).join(",")])
-
-
+      players.current.forEach(p => p?.destroy?.());
+      players.current = [];
+    };
+  }, [streamKeys, focusedId]);
 
   /* ================= SAVE STATE ================= */
   useEffect(() => {
-    localStorage.setItem("streamToggles", JSON.stringify(streams))
-  }, [streams])
+    localStorage.setItem(
+      "layoutState",
+      JSON.stringify({
+        streams,
+        order,
+        focusedId,
+      })
+    )
+  }, [streams, order, focusedId])
+
+  /* ================= SOLO AUDIO ================= */
+  useEffect(() => {
+    if (!window.YT || !focusedId) return Object.entries(players.current).forEach(([id, player]) => {
+      if (!player?.mute) return
+      if (id === focusedId) player.unMute()
+      else player.mute()
+    })
+  }, [focusedId])
 
   /* ================= RENDER ================= */
   return (
@@ -159,45 +178,54 @@ export default function Page() {
           LIVE: {liveStreams.length} / {streams.length}
         </span>
       </header>
-
-      <main className={`grid grid-${visibleStreams.length}`}>
-        {order
-          .map(id => visibleStreams.find(s => s.channelId === id))
-          .filter((s): s is Streamer => Boolean(s))
-          .map(s => (
-            <div
-              key={s.channelId}
-              className="card"
-              draggable
-              onDragStart={(e) => {
-                e.dataTransfer.setData("id", s.channelId)
-              }}
-              onDragOver={(e) => {
-                e.preventDefault()
-              }}
-              onDrop={(e) => {
-                const from = e.dataTransfer.getData("id")
-                const to = s.channelId
-                if (from === to) return
-
-                setOrder(prev => {
-                  const next = [...prev]
-                  const fromIdx = next.indexOf(from)
-                  const toIdx = next.indexOf(to)
-                  next.splice(fromIdx, 1)
-                  next.splice(toIdx, 0, from)
-                  return next
-                })
-              }}
-            >
-              <div className="player">
-                <div id={`player-${s.channelId}`} />
+      <div className={`content ${focusedId ? "focus" : ""}`}>
+        <main className={`grid ${focusedId ? "focus" : `grid-${visibleStreams.length}`}`}>
+          { /* MAIN AREA */}
+          {visibleStreams
+            .filter(s => !focusedId || s.channelId === focusedId)
+            .map(s => (
+              <div
+                key={s.channelId}
+                className={`card ${focusedId === s.channelId ? "focused" : ""}`}
+                onClick={() => setFocusedId(prev => (prev === s.channelId ? null : s.channelId))}
+              >
+                <div className="player">
+                  <div id={`player-${s.channelId}`} />
+                </div>
+                <span className="label">{s.name}</span>
               </div>
-              <span className="label">{s.name}</span>
-            </div>
-          ))}
-      </main>
-
+            ))}
+        </main>
+        {/* BOTTOM STRIP */}
+        {focusedId && (
+          <div className="bottom-strip">
+            {visibleStreams
+              .filter(s => s.channelId !== focusedId)
+              .map(s => (
+                <div
+                  key={s.channelId}
+                  className="card unfocused"
+                  onClick={() => setFocusedId(s.channelId)}
+                >
+                  <div className="player">
+                    <div id={`player-${s.channelId}`} />
+                  </div>
+                  <span className="label">{s.name}</span>
+                </div>
+              ))}
+          </div>
+        )}
+        {/* CHAT PANEL */}
+        {focusedId && (
+          <aside className="chat-panel">
+            <iframe
+              src={`https://www.youtube.com/live_chat?v=${liveStreams.find(s => s.channelId === focusedId)?.liveVideoId
+                }&embed_domain=${window.location.hostname}`}
+              allow="autoplay"
+            />
+          </aside>
+        )}
+      </div>
       <footer className="offline-bar">
         {(["A4A", "NMC"] as const).map(group => {
           const members = GROUPS[group]
@@ -236,11 +264,11 @@ export default function Page() {
           )
         })}
       </footer>
-    </div>
+    </div >
   )
 }
 
 const GROUPS = {
   A4A: ["yb", "Tepe46", "Tierison", "bang mister aloy", "ibot13", "youKtheo", "Garry Ang", "Bravyson Vconk", "Niko Junius", "GURAISU", "Michelle Christo", "Jessica Prashela", "Derisky Prisadevano", "Juan Herman"],
-  NMC: ["Papuy", "ELJAWZ", "MIRJAAA", "Danny", "Sipije", "a bee gel", "zota frz", "Anjasmara7", "Lezype", "Lise Zhang", "Dobori Tensha VT", "Gray Wellington", "Moonears", "Idinzzz", "PaddanG", "tasya", "Sam Wani", "LokiTheHuman"],
+  NMC: ["Shroud", "Faris AA", "Papuy", "ELJAWZ", "MIRJAAA", "Danny", "Sipije", "a bee gel", "zota frz", "Anjasmara7", "Lezype", "Lise Zhang", "Dobori Tensha VT", "Gray Wellington", "Apinpalingserius", "Moonears", "Idinzzz", "PaddanG", "tasya", "Sam Wani", "LokiTheHuman"],
 }

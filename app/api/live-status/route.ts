@@ -6,12 +6,14 @@ type Streamer = {
     isLive: boolean
     liveVideoId?: string
 }
-
-let cachedData: Streamer[] | null = null
-let lastFetch = 0
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+const API_KEY = process.env.YT_API_KEY!
 
-const STREAMERS = [
+let cache: Streamer[] | null = null
+let cacheTime = 0
+let inflight: Promise<Streamer[]> | null = null
+
+const STREAMERS: Omit<Streamer, "isLive">[] = [
     { name: "yb", channelId: "UCCuzDCoI3EUOo_nhCj4noSw" },
     { name: "Tepe46", channelId: "UCkDkZ8PRYXegUJI8lW8f3ig" },
     { name: "Tierison", channelId: "UCMZ36YmdjEvuQyxxiECv-CQ" },
@@ -38,86 +40,102 @@ const STREAMERS = [
     { name: "Lise Zhang", channelId: "UC3ru50TXTwW_fuN0oyCiIEA" },
     { name: "Dobori Tensha VT", channelId: "UC49Z-uUv47D1Ls2q3PGlbYQ" },
     { name: "Gray Wellington", channelId: "UCmaHGPrL0h_wURwFYgpBN8g" },
+    { name: "Apinpalingserius", channelId: "UCHYXqEaPtUwReavS6FIVDcQ" },
     { name: "Idinzzz", channelId: "UCNhLmDbzYe3O06juIuqUtDg" },
     { name: "Moonears", channelId: "UCMVkKfDhL_B7QQHiuOYHIMw" },
     { name: "PaddanG", channelId: "UCCBHkKFT-XBsBnzVBrXs5Vw" },
-    { name: "tasya", channelId: "UC2ZGuCf3yMc3UjBb8r1dLeQ" },
     { name: "Sam Wani", channelId: "UCHg77VE2davyHptiOS9XPeg" },
+    { name: "tasya", channelId: "UC2ZGuCf3yMc3UjBb8r1dLeQ" },
+    { name: "Shroud", channelId: "UCoz3Kpu5lv-ALhR4h9bDvcw" },
     { name: "LokiTheHuman", channelId: "UC4fWus0_aExGR7NPmfVAwTg" },
 ]
+
+async function fetchJSON(url: string) {
+    const res = await fetch(url, { cache: "no-store" })
+    if (!res.ok) throw new Error("YT API error")
+    return res.json()
+}
+
+async function fetchLiveStatus(): Promise<Streamer[]> {
+    const channelIds = STREAMERS.map(s => s.channelId).join(",")
+
+    const channelData = await fetchJSON(
+        `https://www.googleapis.com/youtube/v3/channels?part=contentDetails&id=${channelIds}&key=${API_KEY}`
+    )
+
+    const uploadMap = new Map<string, string>()
+    for (const c of channelData.items ?? []) {
+        const pid = c?.contentDetails?.relatedPlaylists?.uploads
+        if (pid) uploadMap.set(c.id, pid)
+    }
+
+    const latestVideo = new Map<string, string>()
+
+    await Promise.all(
+        STREAMERS.map(async s => {
+            const pid = uploadMap.get(s.channelId)
+            if (!pid) return
+
+            const data = await fetchJSON(
+                `https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails&maxResults=1&playlistId=${pid}&key=${API_KEY}`
+            )
+
+            const vid = data.items?.[0]?.contentDetails?.videoId
+            if (vid) latestVideo.set(s.channelId, vid)
+        })
+    )
+
+    const videoIds = [...latestVideo.values()].join(",")
+    const liveSet = new Set<string>()
+
+    if (videoIds) {
+        const videoData = await fetchJSON(
+            `https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=${videoIds}&key=${API_KEY}`
+        )
+
+        for (const v of videoData.items ?? []) {
+            const d = v.liveStreamingDetails
+            if (d?.actualStartTime && !d?.actualEndTime) {
+                liveSet.add(v.id)
+            }
+        }
+    }
+
+    return STREAMERS.map(s => {
+        const vid = latestVideo.get(s.channelId)
+        const isLive = !!vid && liveSet.has(vid)
+
+        return {
+            ...s,
+            isLive,
+            liveVideoId: isLive ? vid : undefined,
+        }
+    })
+}
 
 export async function GET() {
     const now = Date.now()
 
-    if (cachedData && now - lastFetch < CACHE_TTL) {
-        return NextResponse.json(cachedData)
+    if (cache && now - cacheTime < CACHE_TTL) {
+        return NextResponse.json(cache)
     }
 
-    const apiKey = process.env.YT_API_KEY!
-    const results: Streamer[] = []
-
-    const channelIds = STREAMERS.map(s => s.channelId).join(",")
-    const channelRes = await fetch(
-        `https://www.googleapis.com/youtube/v3/channels?part=contentDetails&id=${channelIds}&key=${apiKey}`
-    )
-    const channelData = await channelRes.json()
-
-    const uploadMap = new Map<string, string>()
-        ; (channelData.items ?? []).forEach((c: any) => {
-            const pid = c?.contentDetails?.relatedPlaylists?.uploads
-            if (pid) uploadMap.set(c.id, pid)
-        })
-
-    const latestVideoMap = new Map<string, string>()
-
-    for (const s of STREAMERS) {
-        const pid = uploadMap.get(s.channelId)
-        if (!pid) continue
-
-        const res = await fetch(
-            `https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails&maxResults=1&playlistId=${pid}&key=${apiKey}`
-        )
-        const data = await res.json()
-
-        const vid = data.items?.[0]?.contentDetails?.videoId
-        if (vid) latestVideoMap.set(s.channelId, vid)
-    }
-
-    const videoIds = [...latestVideoMap.values()].join(",")
-    const liveSet = new Set<string>()
-
-    if (videoIds) {
-        const videoRes = await fetch(
-            `https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=${videoIds}&key=${apiKey}`
-        )
-        const videoData = await videoRes.json()
-
-            ; (videoData.items ?? []).forEach((v: any) => {
-                const live = v.liveStreamingDetails
-
-                const isLiveNow =
-                    live?.actualStartTime &&
-                    !live?.actualEndTime
-
-                if (isLiveNow) {
-                    liveSet.add(v.id)
-                }
+    if (!inflight) {
+        inflight = fetchLiveStatus()
+            .then(res => {
+                cache = res
+                cacheTime = Date.now()
+                return res
+            })
+            .catch(err => {
+                console.error("YT fetch failed:", err)
+                return cache ?? []
+            })
+            .finally(() => {
+                inflight = null
             })
     }
 
-    STREAMERS.forEach(s => {
-        const vid = latestVideoMap.get(s.channelId)
-        const isLive = !!vid && liveSet.has(vid)
-
-        results.push({
-            ...s,
-            isLive,
-            liveVideoId: isLive ? vid : undefined,
-        })
-    })
-
-    cachedData = results
-    lastFetch = now
-
-    return NextResponse.json(results)
+    const data = await inflight
+    return NextResponse.json(data)
 }
