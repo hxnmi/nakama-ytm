@@ -8,6 +8,7 @@ type Streamer = {
   liveVideoId?: string
   isLive: boolean
   enabled: boolean
+  concurrentViewers?: number
 }
 
 declare global {
@@ -24,6 +25,10 @@ export default function Page() {
   const [focusedId, setFocusedId] = useState<string | null>(null)
   const [showOffline, setShowOffline] = useState(false);
   const [ytReady, setYtReady] = useState(false)
+  const [audioMode, setAudioMode] = useState<"mute" | "reduce">("mute")
+  const [masterVolume, setMasterVolume] = useState(40)
+  const [unfocusedVolume, setUnfocusedVolume] = useState(30) // %
+
 
 
   const liveStreams = streams.filter(
@@ -159,15 +164,41 @@ export default function Page() {
     )
   }, [streams, order, focusedId])
 
-  /* ================= SOLO AUDIO ================= */
+  /* ================= AUDIO CONTROL ================= */
   useEffect(() => {
-    if (!focusedId) return
+    const entries = Object.entries(players.current)
 
-    Object.entries(players.current).forEach(([id, player]) => {
-      if (!player?.mute) return
-      id === focusedId ? player.unMute() : player.mute()
+    // Helper
+    const clamp = (v: number) => Math.max(0, Math.min(100, v))
+
+    if (!focusedId) {
+      entries.forEach(([_, player]) => {
+        if (!player?.unMute || !player?.setVolume) return
+        player.unMute()
+        player.setVolume(clamp(masterVolume))
+      })
+      return
+    }
+
+    entries.forEach(([id, player]) => {
+      if (!player?.mute || !player?.setVolume) return
+
+      if (id === focusedId) {
+        player.unMute()
+        player.setVolume(clamp(masterVolume))
+      } else {
+        if (audioMode === "mute") {
+          player.mute()
+        } else {
+          player.unMute()
+          player.setVolume(
+            clamp(Math.round(masterVolume * (unfocusedVolume / 100)))
+          )
+        }
+      }
     })
-  }, [focusedId])
+  }, [focusedId, audioMode, unfocusedVolume, masterVolume])
+
 
   /* ================= RENDER ================= */
   return (
@@ -186,6 +217,50 @@ export default function Page() {
           <h1>Nakama Youtube MultiView</h1>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          {focusedId && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <select
+                value={audioMode}
+                onChange={(e) => setAudioMode(e.target.value as any)}
+                style={{
+                  background: "#262633",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 6,
+                  padding: "4px 8px",
+                  cursor: "pointer",
+                }}
+              >
+                <option value="mute">Mute others</option>
+                <option value="reduce">Reduce others</option>
+              </select>
+
+              {audioMode === "reduce" && (
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={10}
+                  value={unfocusedVolume}
+                  onChange={(e) => setUnfocusedVolume(+e.target.value)}
+                  title={`Others volume: ${unfocusedVolume}%`}
+                />
+              )}
+            </div>
+          )}
+          {!focusedId && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 12, opacity: 0.8 }}>🔊</span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={masterVolume}
+                onChange={(e) => setMasterVolume(+e.target.value)}
+                title={`Master volume: ${masterVolume}%`}
+              />
+            </div>)}
           <button
             onClick={() => setShowOffline(!showOffline)}
             className={`toggle-pill ${showOffline ? 'enabled' : 'disabled'}`}
@@ -199,7 +274,6 @@ export default function Page() {
         </div>
       </header>
       <div className={`content ${focusedId ? "focus" : ""}`}>
-        {/* MAIN AREA */}
         <main className={`grid ${focusedId ? "focus" : `grid-${visibleStreams.length}`}`}>
           {visibleStreams.map(s => {
             const isFocused = s.channelId === focusedId
@@ -217,31 +291,15 @@ export default function Page() {
                   <div id={`player-${s.channelId}`} />
                 </div>
                 <span className="label">{s.name}</span>
+                {s.concurrentViewers && (
+                  <span className="viewer-count">
+                    👁 {s.concurrentViewers.toLocaleString()}
+                  </span>
+                )}
               </div>
             )
           })}
         </main>
-
-        {/* BOTTOM STRIP */}
-        {/* {focusedId && (
-          <div className="bottom-strip">
-            {visibleStreams
-              .filter(s => s.channelId !== focusedId)
-              .map(s => (
-                <div
-                  key={`strip-${s.channelId}`} // Different key for the wrapper
-                  className="card unfocused"
-                  onClick={() => setFocusedId(s.channelId)}
-                >
-                  <div className="player">
-                    <div id={`player-${s.channelId}`} />
-                  </div>
-                  <span className="label">{s.name}</span>
-                </div>
-              ))}
-          </div>
-        )} */}
-        {/* CHAT PANEL */}
         {focusedId && (
           <aside className="chat-panel">
             <iframe
@@ -294,6 +352,7 @@ export default function Page() {
     </div >
   )
 }
+
 
 const GROUPS = {
   A4A: ["yb", "Tepe46", "Tierison", "bang mister aloy", "ibot13", "youKtheo", "Garry Ang", "Bravyson Vconk", "Niko Junius", "GURAISU", "Michelle Christo", "Jessica Prashela", "Derisky Prisadevano", "Juan Herman"],

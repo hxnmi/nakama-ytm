@@ -78,7 +78,11 @@ body {
 }
 
 .content.focus main.grid .card.unfocused .label {
-  bottom: 6px;
+  bottom: 10%;
+}
+
+.content.focus main.grid .card.unfocused .viewer-count {
+  bottom: 25%;
 }
 
 .content.focus main.grid .card.focused {
@@ -212,6 +216,32 @@ main.grid {
   100% {
     opacity: 1
   }
+}
+
+.viewer-count {
+  position: absolute;
+  bottom: 72px;
+  /* sits above name label */
+  left: 8px;
+  z-index: 2;
+
+  background: rgba(0, 0, 0, 0.6);
+  padding: 2px 6px;
+  font-size: 11px;
+  border-radius: 4px;
+
+  color: #e5e5e5;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.card.focused .viewer-count {
+  bottom: 80px;
+  font-size: 12px;
+}
+
+.card:not([data-focused]) .viewer-count {
+  opacity: 0.9;
 }
 
 /* ================= OFFLINE BAR ================= */
@@ -392,7 +422,7 @@ main.grid {
 
 /* ================= BOTTOM STRIP ================= */
 
-.bottom-strip {
+/* .bottom-strip {
   height: 160px;
   display: flex;
   align-items: center;
@@ -427,7 +457,7 @@ main.grid {
 .bottom-strip .card.unfocused:hover {
   opacity: 1;
   transform: translateY(-2px);
-}
+} */
 
 .card.small {
   cursor: pointer;

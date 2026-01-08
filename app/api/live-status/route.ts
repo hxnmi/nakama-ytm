@@ -5,6 +5,7 @@ type Streamer = {
     channelId: string
     isLive: boolean
     liveVideoId?: string
+    concurrentViewers?: number
 }
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 const API_KEY = process.env.YT_API_KEY!
@@ -85,7 +86,7 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
     )
 
     const videoIds = [...latestVideo.values()].join(",")
-    const liveSet = new Set<string>()
+    const liveInfo = new Map<string, number>()
 
     if (videoIds) {
         const videoData = await fetchJSON(
@@ -94,20 +95,26 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
 
         for (const v of videoData.items ?? []) {
             const d = v.liveStreamingDetails
+
             if (d?.actualStartTime && !d?.actualEndTime) {
-                liveSet.add(v.id)
+                liveInfo.set(
+                    v.id,
+                    d.concurrentViewers ? Number(d.concurrentViewers) : 0
+                )
             }
         }
     }
 
     return STREAMERS.map(s => {
         const vid = latestVideo.get(s.channelId)
-        const isLive = !!vid && liveSet.has(vid)
+        const viewers = vid ? liveInfo.get(vid) : undefined
+        const isLive = !!vid && viewers !== undefined
 
         return {
             ...s,
             isLive,
             liveVideoId: isLive ? vid : undefined,
+            concurrentViewers: isLive ? viewers : undefined,
         }
     })
 }
