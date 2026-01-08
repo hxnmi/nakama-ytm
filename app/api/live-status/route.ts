@@ -65,16 +65,20 @@ const STREAMERS: Omit<Streamer, "isLive">[] = [
     { name: "BudyTabootie", channelId: "UCuAhZnRb3b8IOd5o_sEiD_Q" },
     { name: "Happy RP", channelId: "UCcBb71U4E3TxM5FloZWGjqA" },
     { name: "Dipiw", channelId: "UCvrhggVJsdR6uYvuIrX_Grg" },
+    { name: "Raihan Dwi", channelId: "UCksYroc-n4zO47PLPyQXaDA" },
     { name: "tasya", channelId: "UC2ZGuCf3yMc3UjBb8r1dLeQ" },
     { name: "LokiTheHuman", channelId: "UC4fWus0_aExGR7NPmfVAwTg" },
     { name: "irfan_4tm", channelId: "UCJQd6FWZrpJNPxL8BbMbLfQ" },
+    { name: "Boujee Girl", channelId: "UCoAsqbFsvjwxKxT-50xQKDQ" },
     { name: "NengEidel", channelId: "UCqMTZVc8ig-Izz3UnK79Ejw" },
     { name: "Intannn", channelId: "UC26X1vZpfYwjXdjcd6oAPMg" },
     { name: "Wazowsky", channelId: "UCy7vnQ9e_PT--ajeLRkR3pQ" },
     { name: "KafeeyInHere", channelId: "UCz4s1BgKNXTwOHO0PHQHQxQ" },
     { name: "nenabobo", channelId: "UCUC6Ovlo-UNIGD5lKcLIn6Q" },
+    { name: "hi.juenva", channelId: "UCQRryYDuQcShDPxnskgnLuw" },
     { name: "Nanas Art", channelId: "UCd5u137U1cBtVVDoHf6Utag" },
     { name: "Siberian Husky", channelId: "UCCXRK1-4WaU5Pk8iTkhWPqg" },
+    { name: "Ayus Bangga", channelId: "UCMfAAviY4LvvQ2rFx6g_RUw" },
 ]
 
 async function fetchJSON(url: string) {
