@@ -7,7 +7,7 @@ type Streamer = {
     liveVideoId?: string
     concurrentViewers?: number
 }
-const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+const CACHE_TTL = 10 * 60 * 1000 // 10 minutes
 const API_KEY = process.env.YT_API_KEY!
 
 let cache: Streamer[] | null = null
@@ -29,94 +29,124 @@ const STREAMERS: Omit<Streamer, "isLive">[] = [
     { name: "Jessica Prashela", channelId: "UCH_8FYTGTcnuEsyDYzszlWg" },
     { name: "Derisky Prisadevano", channelId: "UCluSMW_P1KtJuP1-Hc3qPUA" },
     { name: "Juan Herman", channelId: "UCxki4Fj3RnfeVD-LReduu-A" },
+    { name: "JAPETLETSDOIT", channelId: "UCM4STwF-ahP5w3KsnhEpKXA" },
+    { name: "Dylan Lauw", channelId: "UC0fbkigSVHeqURIhqWswj-Q" },
+    { name: "MODE siNclair", channelId: "UC0iFPwnHPe85muk00ZttRNw" },
     { name: "Papuy", channelId: "UC5BfiJ5IlmvsvOSgxtMuzfA" },
     { name: "ELJAWZ", channelId: "UCrP8AFjHDuBgfdR9ZWfuG0A" },
     { name: "MIRJAAA", channelId: "UCpt7608IxS_70BQjCre3tgQ" },
     { name: "Danny", channelId: "UCZHSRSIP9m2uxOAOlVJGytw" },
     { name: "Sipije", channelId: "UCAmlE2IwQKZ3t5LlNIyqDeQ" },
-    { name: "a bee gel", channelId: "UCBu6n7CY3k_HdX8THmyEOEw" },
     { name: "zota frz", channelId: "UChEzBCVwQg3EC7QjsF3iZHw" },
+    { name: "a bee gel", channelId: "UCBu6n7CY3k_HdX8THmyEOEw" },
+    { name: "Bopeng", channelId: "UCKN2A4ShReXSHJER9_lfwLw" },
     { name: "Anjasmara7", channelId: "UCLHq02qks9tL0AV7zi7mMNw" },
     { name: "Lezype", channelId: "UCRyx3b7jr7yLyPXeFiqFofg" },
+    { name: "Gabriel", channelId: "UCFgPfI9b8gYqSOkCNLUvyVQ" },
+    { name: "Alesya Nina", channelId: "UCf_n8a6psSuhI08pfz6I5RA" },
+    { name: "Chavilangel", channelId: "UCSplGHIcOjIhQ83K8vxF7PQ" },
+    { name: "Maeve Soo", channelId: "UCw4KiilP-FOF2XxWfMbMeyg" },
     { name: "Lise Zhang", channelId: "UC3ru50TXTwW_fuN0oyCiIEA" },
     { name: "Dobori Tensha VT", channelId: "UC49Z-uUv47D1Ls2q3PGlbYQ" },
     { name: "Gray Wellington", channelId: "UCmaHGPrL0h_wURwFYgpBN8g" },
     { name: "Apinpalingserius", channelId: "UCHYXqEaPtUwReavS6FIVDcQ" },
     { name: "Idinzzz", channelId: "UCNhLmDbzYe3O06juIuqUtDg" },
+    { name: "Kicked417", channelId: "UCpUUrbbl0tjDznAGgkGo7tQ" },
+    { name: "Wayne D Veron", channelId: "UCpDAUPDQ74XZMZzq1oKmeiA" },
     { name: "Moonears", channelId: "UCMVkKfDhL_B7QQHiuOYHIMw" },
+    { name: "Jaka Triad", channelId: "UCFHBoYW_XUy46ojXPKh_BwQ" },
+    { name: "Jacky Jax RP", channelId: "UCWhZw_IsZwYdOyE-UDANwEg" },
+    { name: "nayrdika", channelId: "UCdPva16vonhTB8omB9zXT0Q" },
+    { name: "ihsannn", channelId: "UCFpsNDzOwE6XowRjR6q4GBQ" },
     { name: "PaddanG", channelId: "UCCBHkKFT-XBsBnzVBrXs5Vw" },
     { name: "Sam Wani", channelId: "UCHg77VE2davyHptiOS9XPeg" },
+    { name: "SEYA", channelId: "UCHY6HMPiHbHzR7KzutjjTug" },
+    { name: "CYYA", channelId: "UCRjUQo8O76sITKSjsQ9SrdQ" },
+    { name: "BudyTabootie", channelId: "UCuAhZnRb3b8IOd5o_sEiD_Q" },
+    { name: "Happy RP", channelId: "UCcBb71U4E3TxM5FloZWGjqA" },
+    { name: "Dipiw", channelId: "UCvrhggVJsdR6uYvuIrX_Grg" },
     { name: "tasya", channelId: "UC2ZGuCf3yMc3UjBb8r1dLeQ" },
     { name: "LokiTheHuman", channelId: "UC4fWus0_aExGR7NPmfVAwTg" },
+    { name: "irfan_4tm", channelId: "UCJQd6FWZrpJNPxL8BbMbLfQ" },
+    { name: "NengEidel", channelId: "UCqMTZVc8ig-Izz3UnK79Ejw" },
+    { name: "Intannn", channelId: "UC26X1vZpfYwjXdjcd6oAPMg" },
+    { name: "Wazowsky", channelId: "UCy7vnQ9e_PT--ajeLRkR3pQ" },
+    { name: "KafeeyInHere", channelId: "UCz4s1BgKNXTwOHO0PHQHQxQ" },
+    { name: "nenabobo", channelId: "UCUC6Ovlo-UNIGD5lKcLIn6Q" },
+    { name: "Nanas Art", channelId: "UCd5u137U1cBtVVDoHf6Utag" },
+    { name: "Siberian Husky", channelId: "UCCXRK1-4WaU5Pk8iTkhWPqg" },
 ]
 
 async function fetchJSON(url: string) {
     const res = await fetch(url, { cache: "no-store" })
-    if (!res.ok) throw new Error("YT API error")
+
+    if (!res.ok) {
+        const text = await res.text()
+        throw new Error(`YT API ${res.status}: ${text}`)
+    }
+
     return res.json()
 }
 
-async function fetchLiveStatus(): Promise<Streamer[]> {
-    const channelIds = STREAMERS.map(s => s.channelId).join(",")
 
-    const channelData = await fetchJSON(
-        `https://www.googleapis.com/youtube/v3/channels?part=contentDetails&id=${channelIds}&key=${API_KEY}`
-    )
-
-    const uploadMap = new Map<string, string>()
-    for (const c of channelData.items ?? []) {
-        const pid = c?.contentDetails?.relatedPlaylists?.uploads
-        if (pid) uploadMap.set(c.id, pid)
+function chunk<T>(arr: T[], size: number): T[][] {
+    const res: T[][] = []
+    for (let i = 0; i < arr.length; i += size) {
+        res.push(arr.slice(i, i + size))
     }
+    return res
+}
 
-    const latestVideo = new Map<string, string>()
 
-    await Promise.all(
-        STREAMERS.map(async s => {
-            const pid = uploadMap.get(s.channelId)
-            if (!pid) return
+async function fetchLiveStatus(): Promise<Streamer[]> {
+    const streamerData = STREAMERS.map(s => ({
+        ...s,
+        playlistId: s.channelId.replace(/^UC/, 'UU')
+    }));
 
+    const videoIdPromises = streamerData.map(async (s) => {
+        try {
             const data = await fetchJSON(
-                `https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails&maxResults=1&playlistId=${pid}&key=${API_KEY}`
-            )
+                `https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails&maxResults=1&playlistId=${s.playlistId}&key=${API_KEY}`
+            );
+            return { channelId: s.channelId, videoId: data.items?.[0]?.contentDetails?.videoId };
+        } catch {
+            return { channelId: s.channelId, videoId: null };
+        }
+    });
 
-            const vid = data.items?.[0]?.contentDetails?.videoId
-            if (vid) latestVideo.set(s.channelId, vid)
-        })
-    )
+    const results = await Promise.all(videoIdPromises);
+    const latestVideoMap = new Map(results.map(r => [r.channelId, r.videoId]));
+    const allVideoIds = results.map(r => r.videoId).filter(Boolean) as string[];
 
-    const videoIds = [...latestVideo.values()].join(",")
-    const liveInfo = new Map<string, number>()
+    const liveInfo = new Map<string, number>();
+    const videoChunks = chunk(allVideoIds, 50);
 
-    if (videoIds) {
+    for (const vids of videoChunks) {
         const videoData = await fetchJSON(
-            `https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=${videoIds}&key=${API_KEY}`
-        )
+            `https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=${vids.join(",")}&key=${API_KEY}`
+        );
 
         for (const v of videoData.items ?? []) {
-            const d = v.liveStreamingDetails
-
+            const d = v.liveStreamingDetails;
             if (d?.actualStartTime && !d?.actualEndTime) {
-                liveInfo.set(
-                    v.id,
-                    d.concurrentViewers ? Number(d.concurrentViewers) : 0
-                )
+                liveInfo.set(v.id, Number(d.concurrentViewers || 0));
             }
         }
     }
 
     return STREAMERS.map(s => {
-        const vid = latestVideo.get(s.channelId)
-        const viewers = vid ? liveInfo.get(vid) : undefined
-        const isLive = !!vid && viewers !== undefined
+        const vid = latestVideoMap.get(s.channelId);
+        const viewers = vid ? liveInfo.get(vid) : undefined;
+        const isLive = viewers !== undefined;
 
         return {
             ...s,
             isLive,
             liveVideoId: isLive ? vid : undefined,
             concurrentViewers: isLive ? viewers : undefined,
-        }
-    })
+        };
+    });
 }
 
 export async function GET() {

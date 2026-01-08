@@ -28,8 +28,7 @@ export default function Page() {
   const [audioMode, setAudioMode] = useState<"mute" | "reduce">("mute")
   const [masterVolume, setMasterVolume] = useState(40)
   const [unfocusedVolume, setUnfocusedVolume] = useState(30) // %
-
-
+  const groupStreamsRef = useRef<HTMLDivElement | null>(null)
 
   const liveStreams = streams.filter(
     s => s.isLive && !!s.liveVideoId
@@ -53,6 +52,23 @@ export default function Page() {
       setYtReady(true)
     }
   }, [])
+  useEffect(() => {
+    const el = groupStreamsRef.current
+    if (!el) return
+
+    const update = () => {
+      const hasScrollbar = el.scrollWidth > el.clientWidth
+      el.classList.toggle("has-scrollbar", hasScrollbar)
+    }
+
+    update()
+
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+
+    return () => ro.disconnect()
+  }, [])
+
 
 
   /* ================= SYNC ORDER ================= */
@@ -323,7 +339,7 @@ export default function Page() {
             <div key={group} className="group-row">
               <span className="group-label">{group}</span>
 
-              <div className="group-streams">
+              <div ref={groupStreamsRef} className="group-streams">
                 {groupStreams.map(s => (
                   <span
                     key={s.channelId}
@@ -355,6 +371,6 @@ export default function Page() {
 
 
 const GROUPS = {
-  A4A: ["yb", "Tepe46", "Tierison", "bang mister aloy", "ibot13", "youKtheo", "Garry Ang", "Bravyson Vconk", "Niko Junius", "GURAISU", "Michelle Christo", "Jessica Prashela", "Derisky Prisadevano", "Juan Herman"],
-  NMC: ["Papuy", "ELJAWZ", "MIRJAAA", "Danny", "Sipije", "a bee gel", "zota frz", "Anjasmara7", "Lezype", "Lise Zhang", "Dobori Tensha VT", "Gray Wellington", "Apinpalingserius", "Moonears", "Idinzzz", "PaddanG", "tasya", "Sam Wani", "LokiTheHuman"],
+  A4A: ["yb", "Tepe46", "Tierison", "bang mister aloy", "ibot13", "youKtheo", "Garry Ang", "Bravyson Vconk", "Niko Junius", "GURAISU", "Michelle Christo", "Jessica Prashela", "Derisky Prisadevano", "Juan Herman", "JAPETLETSDOIT", "Dylan Lauw", "MODE siNclair"],
+  NMC: ["Papuy", "ELJAWZ", "MIRJAAA", "Danny", "Sipije", "zota frz", "a bee gel", "Bopeng", "Anjasmara7", "Lezype", "Gabriel", "Alesya Nina", "Chavilangel", "Maeve Soo", "Lise Zhang", "Dobori Tensha VT", "Gray Wellington", "Apinpalingserius", "Idinzzz", "Kicked417", "Wayne D Veron", "Moonears", "Jaka Triad", "Jacky Jax RP", "nayrdika", "ihsannn", "PaddanG", "Sam Wani", "SEYA", "CYYA", "BudyTabootie", "Happy RP", "Dipiw", "tasya", , "LokiTheHuman", "irfan_4tm", "NengEidel", "Intannn", "Wazowsky", "KafeeyInHere", "nenabobo", "Nanas Art", "Siberian Husky"],
 }
