@@ -57,45 +57,56 @@ body {
   display: grid;
   flex: 1;
   grid-template-columns: 1fr;
-  height: 100%;
+  width: 100%;
 }
 
 .content.focus {
-  display: grid;
-  grid-template-columns: 1fr 350px;
-  grid-template-rows: 1fr;
-  height: calc(100vh - 52px - 80px);
-  overflow: hidden;
+  grid-template-rows: 640px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 400px);
 }
 
 .content.focus main.grid {
-  display: flex;
+  display: grid;
   flex-direction: column;
-  height: 100%;
   padding: 8px;
-  gap: 8px;
-  height: 100%;
+  overflow: hidden;
+  justify-items: center;
 }
 
-.content.focus .chat-panel {
-  grid-column: 2 / 3;
-  grid-row: 1 / 2;
+.content.focus main.grid .card.unfocused {
+  display: grid;
 }
 
-.content.focus .bottom-strip {
-  grid-column: 1 / -1;
-  grid-row: 2 / 3;
+.content.focus main.grid .card.unfocused .label {
+  bottom: 6px;
 }
+
+.content.focus main.grid .card.focused {
+  flex: 1;
+  width: 100%;
+}
+
+.content.focus .card.focused .player {
+  width: 100%;
+}
+
+.card.focused {
+  border-radius: 12px;
+}
+
 
 
 /* ================= GRID ================= */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+}
 
 main.grid {
   display: grid;
   gap: 8px;
   padding: 8px;
   overflow: auto;
-  align-items: stretch;
 }
 
 .grid-1 {
@@ -140,6 +151,15 @@ main.grid {
   overflow: hidden;
   position: relative;
   width: 100%;
+}
+
+.card[data-focused="true"] {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.card[data-focused="false"] {
+  opacity: 0.9;
 }
 
 .player {
@@ -291,30 +311,46 @@ main.grid {
 
 /* ================= FOCUS MODE ================= */
 .grid.focus {
-  display: grid;
-  grid-template-areas:
-    "main"
-    "strip";
-  grid-template-columns: 1fr;
-  grid-template-rows: 1fr 160px;
-  grid-column: 1 / 2;
-  grid-row: 1 / 2;
-  gap: 10px;
+  height: 125%;
+  overflow: hidden;
 }
 
 .card.focused {
-  flex: 1;
+  /* flex: 1;
+  width: 100%;
+  height: 100%; */
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  /* IMPORTANT for flex children */
+  display: flex;
+  flex-direction: column;
+}
+
+.card.focused .player {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: 100%;
+}
+
+.card.focused .player iframe,
+.card.focused .player>div {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
 }
 
+
 .card.unfocused {
-  width: 240px;
   height: 100%;
   flex-shrink: 0;
   cursor: pointer;
   border: 2px solid transparent;
   transition: border 0.2s;
+  align-items: center;
 }
 
 .card.unfocused:hover {
@@ -326,10 +362,6 @@ main.grid {
   background: rgba(80, 80, 87, 0.9);
   outline: 2px solid #f7f8fa;
   border-radius: 4px;
-}
-
-.card.unfocused .label {
-  bottom: 8px;
 }
 
 .unfocused-container {
@@ -361,14 +393,40 @@ main.grid {
 /* ================= BOTTOM STRIP ================= */
 
 .bottom-strip {
-  grid-column: 1 / 2;
-  grid-row: 2 / 3;
+  height: 160px;
   display: flex;
-  flex-direction: row;
+  align-items: center;
   gap: 10px;
-  padding: 5px;
-  overflow-x: auto;
-  background: rgba(0, 0, 0, 0.3);
+  padding: 8px;
+  flex-shrink: 0;
+}
+
+.bottom-strip .card.unfocused {
+  width: 240px;
+  min-width: 240px;
+  height: 135px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.bottom-strip .card.unfocused .player {
+  width: 100%;
+  height: 100%;
+}
+
+.bottom-strip .card.unfocused .label {
+  bottom: 6px;
+}
+
+.bottom-strip .card.unfocused {
+  border-radius: 8px;
+  opacity: 0.85;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.bottom-strip .card.unfocused:hover {
+  opacity: 1;
+  transform: translateY(-2px);
 }
 
 .card.small {
@@ -408,4 +466,5 @@ main.grid {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+  height: 20px;
 }

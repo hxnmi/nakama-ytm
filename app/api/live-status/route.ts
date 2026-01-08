@@ -46,7 +46,6 @@ const STREAMERS: Omit<Streamer, "isLive">[] = [
     { name: "PaddanG", channelId: "UCCBHkKFT-XBsBnzVBrXs5Vw" },
     { name: "Sam Wani", channelId: "UCHg77VE2davyHptiOS9XPeg" },
     { name: "tasya", channelId: "UC2ZGuCf3yMc3UjBb8r1dLeQ" },
-    { name: "Shroud", channelId: "UCoz3Kpu5lv-ALhR4h9bDvcw" },
     { name: "LokiTheHuman", channelId: "UC4fWus0_aExGR7NPmfVAwTg" },
 ]
 

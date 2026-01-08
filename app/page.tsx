@@ -18,10 +18,13 @@ declare global {
 }
 
 export default function Page() {
-  const players = useRef<any[]>([])
+  const players = useRef<Record<string, any>>({})
   const [streams, setStreams] = useState<Streamer[]>([])
   const [order, setOrder] = useState<string[]>([])
   const [focusedId, setFocusedId] = useState<string | null>(null)
+  const [showOffline, setShowOffline] = useState(false);
+  const [ytReady, setYtReady] = useState(false)
+
 
   const liveStreams = streams.filter(
     s => s.isLive && !!s.liveVideoId
@@ -30,6 +33,21 @@ export default function Page() {
   const visibleStreams = liveStreams
     .filter(s => s.enabled)
     .slice(0, 12)
+
+  useEffect(() => {
+    if (window.YT?.Player) {
+      setYtReady(true)
+      return
+    }
+
+    const tag = document.createElement("script")
+    tag.src = "https://www.youtube.com/iframe_api"
+    document.body.appendChild(tag)
+
+    window.onYouTubeIframeAPIReady = () => {
+      setYtReady(true)
+    }
+  }, [])
 
 
   /* ================= SYNC ORDER ================= */
@@ -100,41 +118,34 @@ export default function Page() {
   /* ================= YOUTUBE PLAYERS ================= */
   const streamKeys = visibleStreams.map(s => s.channelId).join(",");
   useEffect(() => {
-    if (!visibleStreams.length) return;
+    if (!ytReady) return
 
-    players.current.forEach(p => {
-      try { p?.destroy?.(); } catch (e) { console.error("YT Destroy Error:", e); }
-    });
-    players.current = [];
+    visibleStreams.forEach(s => {
+      const id = s.channelId
+      const el = document.getElementById(`player-${id}`)
 
-    const init = () => {
-      visibleStreams.forEach((s, i) => {
-        const elementId = `player-${s.channelId}`;
-        if (document.getElementById(elementId)) {
-          players.current[i] = new window.YT.Player(elementId, {
-            videoId: s.liveVideoId,
-            playerVars: {
-              autoplay: 1,
-              playsinline: 1,
-              mute: focusedId ? (s.channelId !== focusedId) : false
-            },
-          });
-        }
-      });
-    };
+      if (!el) return
 
-    if (window.YT && window.YT.Player) {
-      const t = setTimeout(init, 50);
-      return () => clearTimeout(t);
-    } else {
-      window.onYouTubeIframeAPIReady = () => setTimeout(init, 50);
-    }
+      if (!players.current[id]) {
+        players.current[id] = new window.YT.Player(el, {
+          videoId: s.liveVideoId,
+          playerVars: {
+            autoplay: 1,
+            playsinline: 1,
+          },
+        })
+      }
+    })
 
-    return () => {
-      players.current.forEach(p => p?.destroy?.());
-      players.current = [];
-    };
-  }, [streamKeys, focusedId]);
+    Object.keys(players.current).forEach(id => {
+      if (!visibleStreams.find(s => s.channelId === id)) {
+        players.current[id].destroy()
+        delete players.current[id]
+      }
+    })
+  }, [ytReady, streamKeys])
+
+
 
   /* ================= SAVE STATE ================= */
   useEffect(() => {
@@ -150,10 +161,11 @@ export default function Page() {
 
   /* ================= SOLO AUDIO ================= */
   useEffect(() => {
-    if (!window.YT || !focusedId) return Object.entries(players.current).forEach(([id, player]) => {
+    if (!focusedId) return
+
+    Object.entries(players.current).forEach(([id, player]) => {
       if (!player?.mute) return
-      if (id === focusedId) player.unMute()
-      else player.mute()
+      id === focusedId ? player.unMute() : player.mute()
     })
   }, [focusedId])
 
@@ -173,37 +185,51 @@ export default function Page() {
           />
           <h1>Nakama Youtube MultiView</h1>
         </div>
-
-        <span className="live-count">
-          LIVE: {liveStreams.length} / {streams.length}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <button
+            onClick={() => setShowOffline(!showOffline)}
+            className={`toggle-pill ${showOffline ? 'enabled' : 'disabled'}`}
+            style={{ background: showOffline ? '#e11d48' : '#262633', border: 'none', color: '#fff', cursor: 'pointer' }}
+          >
+            {showOffline ? "Hide Offline" : "Show Offline"}
+          </button>
+          <span className="live-count">
+            LIVE: {liveStreams.length} / {streams.length}
+          </span>
+        </div>
       </header>
       <div className={`content ${focusedId ? "focus" : ""}`}>
+        {/* MAIN AREA */}
         <main className={`grid ${focusedId ? "focus" : `grid-${visibleStreams.length}`}`}>
-          { /* MAIN AREA */}
-          {visibleStreams
-            .filter(s => !focusedId || s.channelId === focusedId)
-            .map(s => (
+          {visibleStreams.map(s => {
+            const isFocused = s.channelId === focusedId
+
+            return (
               <div
                 key={s.channelId}
-                className={`card ${focusedId === s.channelId ? "focused" : ""}`}
-                onClick={() => setFocusedId(prev => (prev === s.channelId ? null : s.channelId))}
+                className={`card ${isFocused ? "focused" : "unfocused"}`}
+                data-focused={isFocused}
+                onClick={() =>
+                  setFocusedId(prev => (prev === s.channelId ? null : s.channelId))
+                }
               >
                 <div className="player">
                   <div id={`player-${s.channelId}`} />
                 </div>
                 <span className="label">{s.name}</span>
               </div>
-            ))}
+            )
+          })}
         </main>
+
         {/* BOTTOM STRIP */}
-        {focusedId && (
+        {/* {focusedId && (
           <div className="bottom-strip">
             {visibleStreams
               .filter(s => s.channelId !== focusedId)
               .map(s => (
                 <div
-                  key={s.channelId}
+                  key={`strip-${s.channelId}`} // Different key for the wrapper
                   className="card unfocused"
                   onClick={() => setFocusedId(s.channelId)}
                 >
@@ -214,7 +240,7 @@ export default function Page() {
                 </div>
               ))}
           </div>
-        )}
+        )} */}
         {/* CHAT PANEL */}
         {focusedId && (
           <aside className="chat-panel">
@@ -232,7 +258,8 @@ export default function Page() {
 
           const groupStreams = streams
             .filter(s => members.includes(s.name))
-            .sort((a, b) => (a.isLive === b.isLive ? 0 : a.isLive ? -1 : 1))
+            .filter(s => showOffline ? true : s.isLive)
+            .sort((a, b) => (a.isLive === b.isLive ? 0 : a.isLive ? -1 : 1));
 
           return (
             <div key={group} className="group-row">
@@ -270,5 +297,5 @@ export default function Page() {
 
 const GROUPS = {
   A4A: ["yb", "Tepe46", "Tierison", "bang mister aloy", "ibot13", "youKtheo", "Garry Ang", "Bravyson Vconk", "Niko Junius", "GURAISU", "Michelle Christo", "Jessica Prashela", "Derisky Prisadevano", "Juan Herman"],
-  NMC: ["Shroud", "Faris AA", "Papuy", "ELJAWZ", "MIRJAAA", "Danny", "Sipije", "a bee gel", "zota frz", "Anjasmara7", "Lezype", "Lise Zhang", "Dobori Tensha VT", "Gray Wellington", "Apinpalingserius", "Moonears", "Idinzzz", "PaddanG", "tasya", "Sam Wani", "LokiTheHuman"],
+  NMC: ["Papuy", "ELJAWZ", "MIRJAAA", "Danny", "Sipije", "a bee gel", "zota frz", "Anjasmara7", "Lezype", "Lise Zhang", "Dobori Tensha VT", "Gray Wellington", "Apinpalingserius", "Moonears", "Idinzzz", "PaddanG", "tasya", "Sam Wani", "LokiTheHuman"],
 }
