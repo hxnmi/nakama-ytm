@@ -143,7 +143,11 @@ export default function Page() {
             if (isClient && prevS && prevS !== "live" && r.status === "live") {
               const now = Date.now()
               if (now - (lastNotifyAtRef.current[r.channelId] || 0) > 60000) {
-                setNotifications(n => [...n, { id: now.toString(), type: "live", message: `🔴 ${r.name} is LIVE` }])
+                setNotifications(n => [...n, {
+                  id: crypto.randomUUID(),
+                  type: "live",
+                  message: `🔴 ${r.name} is LIVE`
+                }])
                 lastNotifyAtRef.current[r.channelId] = now
               }
             }
@@ -484,5 +488,5 @@ export default function Page() {
 
 const GROUPS = {
   A4A: ["yb", "Tepe46", "Tierison", "bang mister aloy", "ibot13", "youKtheo", "Garry Ang", "Bravyson Vconk", "Niko Junius", "GURAISU", "Michelle Christo", "Jessica Prashela", "Derisky Prisadevano", "Juan Herman", "JAPETLETSDOIT", "Dylan Lauw", "MODE siNclair"],
-  NMC: ["Papuy", "ELJAWZ", "MIRJAAA", "Danny", "Sipije", "zota frz", "a bee gel", "Bopeng", "Anjasmara7", "Lezype", "Gabriel", "Alesya Nina", "Chavilangel", "Maeve Soo", "Lise Zhang", "Dobori Tensha VT", "Gray Wellington", "Apinpalingserius", "Idinzzz", "Kicked417", "Wayne D Veron", "Moonears", "Jaka Triad", "Jacky Jax RP", "nayrdika", "ihsannn", "PaddanG", "Sam Wani", "SEYA", "CYYA", "BudyTabootie", "Happy RP", "Dipiw", "Raihan Dwi", "tasya", "LokiTheHuman", "irfan_4tm", "Boujee Girl", "NengEidel", "Intannn", "Wazowsky", "KafeeyInHere", "nenabobo", "hi.juenva", "Nanas Art", "Siberian Husky", "Ayus Bangga"],
+  NMC: ["Papuy", "ELJAWZ", "MIRJAAA", "Danny", "Sipije", "zota frz", "a bee gel", "Bopeng", "Anjasmara7", "Lezype", "Gabriel", "Alesya Nina", "Chavilangel", "Maeve Soo", "Lise Zhang", "Dobori Tensha VT", "Gray Wellington", "Apinpalingserius", "Idinzzz", "Kicked417", "Wayne D Veron", "Moonears", "Jaka Triad", "Jacky Jax RP", "Risky Prabu", "nayrdika", "ihsannn", "PaddanG", "Sam Wani", "SEYA", "CYYA", "Qune Chan", "BudyTabootie", "Happy RP", "Dipiw", "Raihan Dwi", "tasya", "LokiTheHuman", "irfan_4tm", "Boujee Girl", "NengEidel", "Intannn", "Wazowsky", "KafeeyInHere", "nenabobo", "hi.juenva", "ItsLin", "dipanggilcuno", "Imed Mettu", "Ronny Bons", "Papa Gejet", "Nanas Art", "Siberian Husky", "Ayus Bangga"],
 }

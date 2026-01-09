@@ -2,14 +2,13 @@ import { NextResponse } from "next/server"
 import { XMLParser } from "fast-xml-parser"
 
 export const dynamic = 'force-dynamic'
-const CACHE_TTL = 60 * 1000 // 1 minute
-const API_KEY = process.env.YT_API_KEY!
 
 /* ================= CONFIG ================= */
-const DEPTH_STEPS = [3, 5, 7]
-const MIN_DEPTH = 3
-const OFFLINE_SKIP_MS = 10 * 60 * 1000
-const DEPTH_COOLDOWN_POLLS = 3
+const API_KEY = process.env.YT_API_KEY!
+const CACHE_TTL = 90 * 1000
+const DEPTH_STEPS = [3, 1]
+const OFFLINE_CONFIRM_POLLS = 3
+const ACTIVE_WINDOW_MS = 15 * 60 * 1000
 
 /* ================= TYPES ================= */
 export type StreamStatus =
@@ -69,12 +68,14 @@ const STREAMERS: Omit<Streamer, "status">[] = [
     { name: "Moonears", channelId: "UCMVkKfDhL_B7QQHiuOYHIMw" },
     { name: "Jaka Triad", channelId: "UCFHBoYW_XUy46ojXPKh_BwQ" },
     { name: "Jacky Jax RP", channelId: "UCWhZw_IsZwYdOyE-UDANwEg" },
+    { name: "Risky Prabu", channelId: "UCRUU-6WAHT9jjhxC09ILO-A" },
     { name: "nayrdika", channelId: "UCdPva16vonhTB8omB9zXT0Q" },
     { name: "ihsannn", channelId: "UCFpsNDzOwE6XowRjR6q4GBQ" },
     { name: "PaddanG", channelId: "UCCBHkKFT-XBsBnzVBrXs5Vw" },
     { name: "Sam Wani", channelId: "UCHg77VE2davyHptiOS9XPeg" },
     { name: "SEYA", channelId: "UCHY6HMPiHbHzR7KzutjjTug" },
     { name: "CYYA", channelId: "UCRjUQo8O76sITKSjsQ9SrdQ" },
+    { name: "Qune Chan", channelId: "UCBVJqj48yaFYzJvCGCISm_g" },
     { name: "BudyTabootie", channelId: "UCuAhZnRb3b8IOd5o_sEiD_Q" },
     { name: "Happy RP", channelId: "UCcBb71U4E3TxM5FloZWGjqA" },
     { name: "Dipiw", channelId: "UCvrhggVJsdR6uYvuIrX_Grg" },
@@ -89,16 +90,19 @@ const STREAMERS: Omit<Streamer, "status">[] = [
     { name: "KafeeyInHere", channelId: "UCz4s1BgKNXTwOHO0PHQHQxQ" },
     { name: "nenabobo", channelId: "UCUC6Ovlo-UNIGD5lKcLIn6Q" },
     { name: "hi.juenva", channelId: "UCQRryYDuQcShDPxnskgnLuw" },
+    { name: "ItsLin", channelId: "UChC9H3kvWlz9-DJa7QmpvYA" },
+    { name: "dipanggilcuno", channelId: "UCtw795IKH4fzMWXv0_J-I5Q" },
+    { name: "Imed Mettu", channelId: "UCnmnGqHJA0bestWPYeqnJQg" },
+    { name: "Ronny Bons", channelId: "UCJTq8YQXj-2_BNgwis4SGsg" },
+    { name: "Papa Gejet", channelId: "UCXXnxxYJ5dY_tsOb0ELBc2w" },
     { name: "Nanas Art", channelId: "UCd5u137U1cBtVVDoHf6Utag" },
     { name: "Siberian Husky", channelId: "UCCXRK1-4WaU5Pk8iTkhWPqg" },
     { name: "Ayus Bangga", channelId: "UCMfAAviY4LvvQ2rFx6g_RUw" },
 ]
 
 /* ================= MEMORY ================= */
-const depthMemory = new Map<string, number>()
-const offlineSince = new Map<string, number>()
-const stableOfflinePolls = new Map<string, number>()
-const lastStatus = new Map<string, StreamStatus>()
+const offlinePolls = new Map<string, number>()
+const lastActiveAt = new Map<string, number>()
 
 let cache: Streamer[] | null = null
 let cacheTime = 0
@@ -137,21 +141,21 @@ async function fetchRssVideoIds(
 
 /* ================= CORE ================= */
 async function fetchLiveStatus(): Promise<Streamer[]> {
-    const now = Date.now()
     const channelCandidates = new Map<string, string[]>()
+    const now = Date.now()
 
     for (const s of STREAMERS) {
-        const lastOff = offlineSince.get(s.channelId)
-        if (lastOff && now - lastOff < OFFLINE_SKIP_MS) continue
+        const lastActive = lastActiveAt.get(s.channelId) ?? 0
 
-        const remembered = depthMemory.get(s.channelId) ?? DEPTH_STEPS[0]
-        const steps = DEPTH_STEPS.filter(d => d >= remembered)
+        const depths =
+            now - lastActive < ACTIVE_WINDOW_MS
+                ? DEPTH_STEPS
+                : [1]
 
-        for (const depth of steps) {
+        for (const depth of depths) {
             const vids = await fetchRssVideoIds(s.channelId, depth)
             if (vids.length) {
                 channelCandidates.set(s.channelId, vids)
-                depthMemory.set(s.channelId, depth)
                 break
             }
         }
@@ -194,15 +198,29 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
         const info = hit ? videoInfo.get(hit) : null
 
         let status: StreamStatus = "offline"
-        if (info?.status === "live") status = "live"
-        else if (info?.status === "scheduled") status = hit ? "waiting" : "scheduled"
+        if (info?.status === "live") {
+            status = "live"
+            offlinePolls.delete(s.channelId)
+            lastActiveAt.set(s.channelId, Date.now())
+        }
+        else if (info?.status === "scheduled") {
+            status = hit ? "waiting" : "scheduled"
+            offlinePolls.delete(s.channelId)
+            lastActiveAt.set(s.channelId, Date.now())
+        } else {
+            const count = (offlinePolls.get(s.channelId) ?? 0) + 1
+            offlinePolls.set(s.channelId, count)
 
-        lastStatus.set(s.channelId, status)
+            if (count < OFFLINE_CONFIRM_POLLS) {
+                status = "waiting"
+                lastActiveAt.set(s.channelId, Date.now())
+            }
+        }
 
         return {
             ...s,
             status,
-            liveVideoId: status === "live" || status === "waiting" ? hit : undefined,
+            liveVideoId: status !== "offline" ? hit : undefined,
             concurrentViewers: info?.viewers,
         }
     })

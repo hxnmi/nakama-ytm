@@ -337,13 +337,13 @@ main.grid {
 }
 
 .toggle-pill.waiting .dot {
-  background: #eab308;
+  background: #facc15;
   box-shadow: 0 0 4px rgba(250, 204, 21, 0.7);
 }
 
 .toggle-pill.scheduled .dot {
-  background: #facc15;
-  box-shadow: 0 0 4px rgba(250, 204, 21, 0.7);
+  background: #30fa15;
+  box-shadow: 0 0 4px rgba(74, 250, 21, 0.7);
 }
 
 .toggle-pill.offline .dot {
