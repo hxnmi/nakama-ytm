@@ -8,6 +8,7 @@ body {
   background: #050507;
   color: #e5e5e5;
   font-family: Inter, sans-serif;
+  z-index: -1;
 }
 
 .app {
@@ -17,8 +18,6 @@ body {
 }
 
 /* ================= HEADER ================= */
-
-
 .header {
   height: 52px;
   background: #0f0f13;
@@ -52,7 +51,6 @@ body {
 }
 
 /* ================= CONTENT LAYOUT ================= */
-
 .content {
   display: grid;
   flex: 1;
@@ -61,7 +59,7 @@ body {
 }
 
 .content.focus {
-  grid-template-rows: 640px;
+  grid-template-rows: 770px;
   grid-template-columns: minmax(0, 1fr) minmax(0, 400px);
 }
 
@@ -97,8 +95,6 @@ body {
 .card.focused {
   border-radius: 12px;
 }
-
-
 
 /* ================= GRID ================= */
 .grid {
@@ -146,7 +142,6 @@ main.grid {
 }
 
 /* ================= CARD ================= */
-
 .card {
   display: flex;
   flex-direction: column;
@@ -179,7 +174,6 @@ main.grid {
 }
 
 /* ================= LABEL ================= */
-
 .label {
   position: absolute;
   bottom: 50px;
@@ -224,12 +218,10 @@ main.grid {
   /* sits above name label */
   left: 8px;
   z-index: 2;
-
   background: rgba(0, 0, 0, 0.6);
   padding: 2px 6px;
   font-size: 11px;
   border-radius: 4px;
-
   color: #e5e5e5;
   pointer-events: none;
   white-space: nowrap;
@@ -245,14 +237,11 @@ main.grid {
 }
 
 /* ================= OFFLINE BAR ================= */
-
 .offline-bar {
   display: flex;
   flex-direction: column;
-
   padding: 6px 12px;
   background: #0f0f13;
-
   height: auto;
   min-height: 40px;
   overflow: hidden;
@@ -265,12 +254,9 @@ main.grid {
   left: 0;
   right: 0;
   height: 16px;
-  background: linear-gradient(to bottom,
-      rgba(15, 15, 19, 0),
-      rgba(15, 15, 19, 1));
+  background: linear-gradient(to bottom, rgba(15, 15, 19, 0), rgba(15, 15, 19, 1));
   pointer-events: none;
 }
-
 
 .offline-pill {
   background: #1b1b23;
@@ -281,7 +267,7 @@ main.grid {
   white-space: nowrap;
 }
 
-/* =================  TOGGGLE ================= */
+/* ================= TOGGGLE ================= */
 .stream-toggle {
   display: flex;
   gap: 12px;
@@ -318,12 +304,16 @@ main.grid {
   transition: background 0.15s, opacity 0.15s;
 }
 
-.toggle-pill.live.enabled {
+.toggle-pill.live.enabled,
+.toggle-pill.waiting.enabled,
+.toggle-pill.scheduled.enabled {
   background: #1b1b23;
   color: #fff;
 }
 
-.toggle-pill.live.disabled {
+.toggle-pill.live.disabled,
+.toggle-pill.waiting.disabled,
+.toggle-pill.scheduled.disabled {
   background: #0f0f13;
   color: #777;
   opacity: 0.6;
@@ -342,11 +332,23 @@ main.grid {
 }
 
 .toggle-pill.live .dot {
-  background: red;
+  background: #ef4444;
+  box-shadow: 0 0 4px rgba(239, 68, 68, 0.8);
+}
+
+.toggle-pill.waiting .dot {
+  background: #eab308;
+  box-shadow: 0 0 4px rgba(250, 204, 21, 0.7);
+}
+
+.toggle-pill.scheduled .dot {
+  background: #facc15;
+  box-shadow: 0 0 4px rgba(250, 204, 21, 0.7);
 }
 
 .toggle-pill.offline .dot {
   background: #555;
+  box-shadow: none;
 }
 
 .toggle-pill.live:hover {
@@ -355,14 +357,11 @@ main.grid {
 
 /* ================= FOCUS MODE ================= */
 .grid.focus {
-  height: 120%;
   overflow: hidden;
 }
 
 .card.focused {
-  /* flex: 1;
-  width: 100%;
-  height: 100%; */
+  /* flex: 1; width: 100%; height: 100%; */
   flex: 1 1 auto;
   width: 100%;
   min-height: 0;
@@ -386,7 +385,6 @@ main.grid {
   width: 100%;
   height: 100%;
 }
-
 
 .card.unfocused {
   height: 100%;
@@ -419,13 +417,14 @@ main.grid {
 }
 
 /* ================= CHAT PANEL ================= */
-
 .chat-panel {
   grid-column: 2 / 3;
   grid-row: 1 / 3;
   background: #0b0b0d;
   border-left: 1px solid rgba(255, 255, 255, 0.08);
   height: 100%;
+  position: relative;
+  z-index: 1;
 }
 
 .chat-panel iframe {
@@ -443,8 +442,22 @@ main.grid {
   opacity: 1;
 }
 
-/* ================= GROUPED FOOTER ================= */
+/* ================= CHAT OVERLAY ================= */
 
+.chat-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: #ccc;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* ================= GROUPED FOOTER ================= */
 .grouped-footer {
   flex-direction: column;
   align-items: stretch;
@@ -498,4 +511,43 @@ main.grid {
 
 .group-streams:hover::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.25);
+}
+
+/* ================= NOTIFICATION ================= */
+.notify-stack {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 9999;
+}
+
+.notify {
+  background: #1b1b23;
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  animation: slideIn 0.2s ease;
+}
+
+.notify.live {
+  border-left: 4px solid #ef4444;
+}
+
+.notify.info {
+  border-left: 4px solid #facc15;
+  color: #fef3c7;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }

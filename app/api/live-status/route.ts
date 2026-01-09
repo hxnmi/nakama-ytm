@@ -1,20 +1,33 @@
 import { NextResponse } from "next/server"
+import { XMLParser } from "fast-xml-parser"
+
+export const dynamic = 'force-dynamic'
+const CACHE_TTL = 60 * 1000 // 1 minute
+const API_KEY = process.env.YT_API_KEY!
+
+/* ================= CONFIG ================= */
+const DEPTH_STEPS = [3, 5, 7]
+const MIN_DEPTH = 3
+const OFFLINE_SKIP_MS = 10 * 60 * 1000
+const DEPTH_COOLDOWN_POLLS = 3
+
+/* ================= TYPES ================= */
+export type StreamStatus =
+    | "live"
+    | "waiting"
+    | "scheduled"
+    | "offline"
 
 type Streamer = {
     name: string
     channelId: string
-    isLive: boolean
+    status: StreamStatus
     liveVideoId?: string
     concurrentViewers?: number
 }
-const CACHE_TTL = 10 * 60 * 1000 // 10 minutes
-const API_KEY = process.env.YT_API_KEY!
 
-let cache: Streamer[] | null = null
-let cacheTime = 0
-let inflight: Promise<Streamer[]> | null = null
-
-const STREAMERS: Omit<Streamer, "isLive">[] = [
+/* ================= STREAMERS ================= */
+const STREAMERS: Omit<Streamer, "status">[] = [
     { name: "yb", channelId: "UCCuzDCoI3EUOo_nhCj4noSw" },
     { name: "Tepe46", channelId: "UCkDkZ8PRYXegUJI8lW8f3ig" },
     { name: "Tierison", channelId: "UCMZ36YmdjEvuQyxxiECv-CQ" },
@@ -81,78 +94,121 @@ const STREAMERS: Omit<Streamer, "isLive">[] = [
     { name: "Ayus Bangga", channelId: "UCMfAAviY4LvvQ2rFx6g_RUw" },
 ]
 
-async function fetchJSON(url: string) {
-    const res = await fetch(url, { cache: "no-store" })
+/* ================= MEMORY ================= */
+const depthMemory = new Map<string, number>()
+const offlineSince = new Map<string, number>()
+const stableOfflinePolls = new Map<string, number>()
+const lastStatus = new Map<string, StreamStatus>()
 
-    if (!res.ok) {
-        const text = await res.text()
-        throw new Error(`YT API ${res.status}: ${text}`)
-    }
+let cache: Streamer[] | null = null
+let cacheTime = 0
+let inflight: Promise<Streamer[]> | null = null
 
-    return res.json()
-}
-
-
+/* ================= HELPERS ================= */
 function chunk<T>(arr: T[], size: number): T[][] {
-    const res: T[][] = []
+    const out: T[][] = []
     for (let i = 0; i < arr.length; i += size) {
-        res.push(arr.slice(i, i + size))
+        out.push(arr.slice(i, i + size))
     }
-    return res
+    return out
 }
 
+/* ================= RSS ================= */
+async function fetchRssVideoIds(
+    channelId: string,
+    limit: number
+): Promise<string[]> {
+    const res = await fetch(
+        `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`,
+        { cache: "no-store" }
+    )
+    if (!res.ok) return []
 
+    const xml = await res.text()
+    const parser = new XMLParser()
+    const json = parser.parse(xml)
+
+    const entries = json.feed?.entry
+    if (!entries) return []
+
+    const arr = Array.isArray(entries) ? entries : [entries]
+    return arr.slice(0, limit).map((e: any) => e["yt:videoId"]).filter(Boolean)
+}
+
+/* ================= CORE ================= */
 async function fetchLiveStatus(): Promise<Streamer[]> {
-    const streamerData = STREAMERS.map(s => ({
-        ...s,
-        playlistId: s.channelId.replace(/^UC/, 'UU')
-    }));
+    const now = Date.now()
+    const channelCandidates = new Map<string, string[]>()
 
-    const videoIdPromises = streamerData.map(async (s) => {
-        try {
-            const data = await fetchJSON(
-                `https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails&maxResults=1&playlistId=${s.playlistId}&key=${API_KEY}`
-            );
-            return { channelId: s.channelId, videoId: data.items?.[0]?.contentDetails?.videoId };
-        } catch {
-            return { channelId: s.channelId, videoId: null };
+    for (const s of STREAMERS) {
+        const lastOff = offlineSince.get(s.channelId)
+        if (lastOff && now - lastOff < OFFLINE_SKIP_MS) continue
+
+        const remembered = depthMemory.get(s.channelId) ?? DEPTH_STEPS[0]
+        const steps = DEPTH_STEPS.filter(d => d >= remembered)
+
+        for (const depth of steps) {
+            const vids = await fetchRssVideoIds(s.channelId, depth)
+            if (vids.length) {
+                channelCandidates.set(s.channelId, vids)
+                depthMemory.set(s.channelId, depth)
+                break
+            }
         }
-    });
+    }
 
-    const results = await Promise.all(videoIdPromises);
-    const latestVideoMap = new Map(results.map(r => [r.channelId, r.videoId]));
-    const allVideoIds = results.map(r => r.videoId).filter(Boolean) as string[];
+    const allVideoIds = Array.from(channelCandidates.values()).flat()
+    const chunks = chunk(allVideoIds, 50)
 
-    const liveInfo = new Map<string, number>();
-    const videoChunks = chunk(allVideoIds, 50);
+    const videoInfo = new Map<
+        string,
+        { status: StreamStatus; viewers?: number }
+    >()
 
-    for (const vids of videoChunks) {
-        const videoData = await fetchJSON(
-            `https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=${vids.join(",")}&key=${API_KEY}`
-        );
+    for (const ids of chunks) {
+        const res = await fetch(
+            `https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=${ids.join(",")}&key=${API_KEY}`,
+            { cache: "no-store" }
+        )
+        if (!res.ok) continue
 
-        for (const v of videoData.items ?? []) {
-            const d = v.liveStreamingDetails;
-            if (d?.actualStartTime && !d?.actualEndTime) {
-                liveInfo.set(v.id, Number(d.concurrentViewers || 0));
+        const data = await res.json()
+        for (const v of data.items ?? []) {
+            const d = v.liveStreamingDetails
+            if (!d) continue
+
+            if (d.actualStartTime && !d.actualEndTime) {
+                videoInfo.set(v.id, {
+                    status: "live",
+                    viewers: Number(d.concurrentViewers || 0),
+                })
+            } else if (!d.actualStartTime && d.scheduledStartTime) {
+                videoInfo.set(v.id, { status: "scheduled" })
             }
         }
     }
 
     return STREAMERS.map(s => {
-        const vid = latestVideoMap.get(s.channelId);
-        const viewers = vid ? liveInfo.get(vid) : undefined;
-        const isLive = viewers !== undefined;
+        const vids = channelCandidates.get(s.channelId) ?? []
+        const hit = vids.find(v => videoInfo.has(v))
+        const info = hit ? videoInfo.get(hit) : null
+
+        let status: StreamStatus = "offline"
+        if (info?.status === "live") status = "live"
+        else if (info?.status === "scheduled") status = hit ? "waiting" : "scheduled"
+
+        lastStatus.set(s.channelId, status)
 
         return {
             ...s,
-            isLive,
-            liveVideoId: isLive ? vid : undefined,
-            concurrentViewers: isLive ? viewers : undefined,
-        };
-    });
+            status,
+            liveVideoId: status === "live" || status === "waiting" ? hit : undefined,
+            concurrentViewers: info?.viewers,
+        }
+    })
 }
 
+/* ================= API ================= */
 export async function GET() {
     const now = Date.now()
 
@@ -167,15 +223,10 @@ export async function GET() {
                 cacheTime = Date.now()
                 return res
             })
-            .catch(err => {
-                console.error("YT fetch failed:", err)
-                return cache ?? []
-            })
             .finally(() => {
                 inflight = null
             })
     }
 
-    const data = await inflight
-    return NextResponse.json(data)
+    return NextResponse.json(await inflight)
 }
