@@ -162,7 +162,11 @@ export default function Page() {
     }
 
     fetchStatus()
-    const t = setInterval(fetchStatus, 60000)
+    const jitter = Math.random() * 5000
+    const t = setTimeout(() => {
+      const i = setInterval(fetchStatus, 60000)
+      return () => clearInterval(i)
+    }, jitter)
     return () => clearInterval(t)
   }, [isClient])
 
