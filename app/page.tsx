@@ -24,6 +24,12 @@ type AudioPrefs = {
   unfocusedVolume: number
 }
 
+type ReminderState = {
+  show: boolean
+  lastShownAt?: number
+  dismissed?: boolean
+}
+
 declare global {
   interface Window {
     YT: any
@@ -35,8 +41,8 @@ const STORAGE = {
   layout: "layoutState",
   audio: "audioPrefs",
   lastStatus: "lastStreamStatus",
+  subReminder: "subReminderState"
 }
-
 
 export default function Page() {
   const players = useRef<Record<string, any>>({})
@@ -69,6 +75,9 @@ export default function Page() {
   const [chatLoading, setChatLoading] = useState(false)
   const [chatUnavailable, setChatUnavailable] = useState(false)
   const [notifications, setNotifications] = useState<Notify[]>([])
+
+  const [subReminders, setSubReminders] =
+    useState<Record<string, ReminderState>>({})
 
   const liveStreams = streams.filter(
     s => s.status === "live" && !!s.liveVideoId
@@ -257,6 +266,79 @@ export default function Page() {
     })
   }, [streams, showOffline])
 
+  function useSubReminder(channelId: string, status: StreamStatus) {
+    const [show, setShow] = useState(false)
+
+    useEffect(() => {
+      if (status !== "live") return
+
+      const raw = localStorage.getItem(STORAGE.subReminder)
+      const data = raw ? JSON.parse(raw) : {}
+      const entry = data[channelId] ?? {}
+
+      const now = Date.now()
+      if (entry.dismissed) return
+      if (entry.lastShownAt && now - entry.lastShownAt < 120_000) return
+
+      setShow(true)
+      data[channelId] = { ...entry, lastShownAt: now }
+      localStorage.setItem(STORAGE.subReminder, JSON.stringify(data))
+    }, [channelId, status])
+
+    const dismiss = () => {
+      const raw = localStorage.getItem(STORAGE.subReminder)
+      const data = raw ? JSON.parse(raw) : {}
+      data[channelId] = { dismissed: true, lastShownAt: Date.now() }
+      localStorage.setItem(STORAGE.subReminder, JSON.stringify(data))
+      setShow(false)
+    }
+
+    return { show, dismiss }
+  }
+
+  useEffect(() => {
+    if (!focusedId) return
+
+    const stream = streams.find(s => s.channelId === focusedId)
+    if (!stream || stream.status !== "live") return
+
+    setSubReminders(prev => {
+      const entry = prev[focusedId] ?? {}
+      const now = Date.now()
+
+      if (entry.dismissed) return prev
+      if (entry.lastShownAt && now - entry.lastShownAt < 120_000)
+        return prev
+
+      return {
+        ...prev,
+        [focusedId]: {
+          ...entry,
+          show: true,
+          lastShownAt: now,
+        },
+      }
+    })
+  }, [focusedId, streams])
+
+  function dismissReminder(channelId: string) {
+    setSubReminders(prev => ({
+      ...prev,
+      [channelId]: {
+        dismissed: true,
+        show: false,
+        lastShownAt: Date.now(),
+      },
+    }))
+  }
+
+  useEffect(() => {
+    localStorage.setItem(
+      STORAGE.subReminder,
+      JSON.stringify(subReminders)
+    )
+  }, [subReminders])
+
   /* ================= CHAT OVERLAY ================= */
   useEffect(() => {
     if (!focusedId) return
@@ -414,6 +496,7 @@ export default function Page() {
         <main className={`grid ${focusedId ? "focus" : `grid-${visibleStreams.length}`}`}>
           {visibleStreams.map(s => {
             const isFocused = s.channelId === focusedId
+            const reminder = subReminders[s.channelId]
 
             return (
               <div
@@ -431,11 +514,28 @@ export default function Page() {
                   <span className="dot" />
                   {s.name}
                 </span>
-                {s.concurrentViewers !== undefined && (
-                  <span className="viewer-count">
-                    👁 {s.concurrentViewers.toLocaleString()}
-                  </span>
+                {isFocused && reminder?.show && (
+                  <div className="sub-reminder">
+                    ⭐ Support {s.name}<br></br>
+                    ⬆️ hover the channel to subscribe!<br></br>
+                    👍 click the title to like!
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        dismissReminder(s.channelId)
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
                 )}
+                {
+                  s.concurrentViewers !== undefined && (
+                    <span className="viewer-count">
+                      👁 {s.concurrentViewers.toLocaleString()}
+                    </span>
+                  )
+                }
               </div>
             )
           })}
