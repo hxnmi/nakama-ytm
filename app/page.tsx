@@ -48,7 +48,6 @@ export default function Page() {
   const players = useRef<Record<string, any>>({})
   const lastStatusRef = useRef<Record<string, StreamStatus>>({})
   const lastNotifyAtRef = useRef<Record<string, number>>({})
-  const groupStreamsRef = useRef<HTMLDivElement | null>(null)
   const audioValues = useRef<{
     masterVolume: number;
     unfocusedVolume: number;
@@ -236,23 +235,6 @@ export default function Page() {
     }
   }, [notifications])
 
-  useEffect(() => {
-    const el = groupStreamsRef.current
-    if (!el) return
-
-    const update = () => {
-      const hasScrollbar = el.scrollWidth > el.clientWidth
-      el.classList.toggle("has-scrollbar", hasScrollbar)
-    }
-
-    update()
-
-    const ro = new ResizeObserver(update)
-    ro.observe(el)
-
-    return () => ro.disconnect()
-  }, [])
-
   const footerGroups = useMemo(() => {
     return (["A4A", "NMC"] as const).map(group => {
       const members = GROUPS[group]
@@ -265,36 +247,6 @@ export default function Page() {
       return { name: group, streams: filtered }
     })
   }, [streams, showOffline])
-
-  function useSubReminder(channelId: string, status: StreamStatus) {
-    const [show, setShow] = useState(false)
-
-    useEffect(() => {
-      if (status !== "live") return
-
-      const raw = localStorage.getItem(STORAGE.subReminder)
-      const data = raw ? JSON.parse(raw) : {}
-      const entry = data[channelId] ?? {}
-
-      const now = Date.now()
-      if (entry.dismissed) return
-      if (entry.lastShownAt && now - entry.lastShownAt < 120_000) return
-
-      setShow(true)
-      data[channelId] = { ...entry, lastShownAt: now }
-      localStorage.setItem(STORAGE.subReminder, JSON.stringify(data))
-    }, [channelId, status])
-
-    const dismiss = () => {
-      const raw = localStorage.getItem(STORAGE.subReminder)
-      const data = raw ? JSON.parse(raw) : {}
-      data[channelId] = { dismissed: true, lastShownAt: Date.now() }
-      localStorage.setItem(STORAGE.subReminder, JSON.stringify(data))
-      setShow(false)
-    }
-
-    return { show, dismiss }
-  }
 
   useEffect(() => {
     if (!focusedId) return
@@ -338,6 +290,68 @@ export default function Page() {
       JSON.stringify(subReminders)
     )
   }, [subReminders])
+
+  useEffect(() => {
+    const SPEED_PX_PER_SEC = 18
+    const EDGE = 2
+
+    const states = new Map<HTMLElement, {
+      dir: 1 | -1
+      carry: number
+    }>()
+
+    let lastTime = performance.now()
+    let rafId: number
+
+    const step = (now: number) => {
+      const dt = (now - lastTime) / 1000
+      lastTime = now
+
+      const containers =
+        document.querySelectorAll<HTMLElement>(".group-streams")
+
+      containers.forEach(el => {
+        if (el.matches(":hover")) return
+
+        let state = states.get(el)
+        if (!state) {
+          state = { dir: 1, carry: 0 }
+          states.set(el, state)
+
+          const maxScroll = el.scrollWidth - el.clientWidth
+          if (maxScroll > 0 && el.scrollLeft === 0) {
+            el.scrollLeft = 1
+          }
+        }
+
+        const maxScroll = el.scrollWidth - el.clientWidth
+        if (maxScroll <= 0) return
+
+        state.carry += state.dir * SPEED_PX_PER_SEC * dt
+        const move = Math.trunc(state.carry)
+
+        if (move !== 0) {
+          el.scrollLeft += move
+          state.carry -= move
+        }
+
+        if (el.scrollLeft < EDGE) el.scrollLeft = EDGE
+        if (el.scrollLeft > maxScroll - EDGE)
+          el.scrollLeft = maxScroll - EDGE
+
+        if (state.dir === 1 && el.scrollLeft >= maxScroll - EDGE) {
+          state.dir = -1
+        } else if (state.dir === -1 && el.scrollLeft <= EDGE) {
+          state.dir = 1
+        }
+      })
+
+      rafId = requestAnimationFrame(step)
+    }
+
+    rafId = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(rafId)
+  }, [])
 
   /* ================= CHAT OVERLAY ================= */
   useEffect(() => {
