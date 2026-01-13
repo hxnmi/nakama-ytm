@@ -6,12 +6,13 @@ export const dynamic = 'force-dynamic'
 
 /* ================= CONFIG ================= */
 const API_KEY = process.env.YT_API_KEY!
-const FAST_TTL = 30 * 1000
-const NORMAL_TTL = 90 * 1000
+const FAST_TTL = 90 * 1000
+const NORMAL_TTL = 5 * 60 * 1000
 const DEPTH_STEPS = [3, 1]
 const OFFLINE_CONFIRM_POLLS = 3
 const ACTIVE_WINDOW_MS = 15 * 60 * 1000
 const RSS_GRACE_MS = 2 * 60 * 1000
+const CHANNEL_STATE_KEY = "channel:states"
 
 /* ================= TYPES ================= */
 export type StreamStatus =
@@ -84,30 +85,16 @@ async function parallelLimit<T, R>(
     return results
 }
 
-function key(channelId: string) {
-    return `channel:${channelId}`
+type ChannelStateMap = Record<string, ChannelState>
+
+async function getAllStates(): Promise<ChannelStateMap> {
+    return (await kv.get<ChannelStateMap>(CHANNEL_STATE_KEY)) ?? {}
 }
 
-async function getState(channelId: string): Promise<ChannelState> {
-    return (await kv.get<ChannelState>(key(channelId))) ?? {}
+async function setAllStates(states: ChannelStateMap) {
+    await kv.set(CHANNEL_STATE_KEY, states, { ex: 60 * 60 * 24 })
 }
 
-function changed(prev: ChannelState, patch: ChannelState) {
-    return Object.entries(patch).some(
-        ([k, v]) => (prev as any)[k] !== v
-    )
-}
-
-async function setState(channelId: string, patch: ChannelState) {
-    const prev = await getState(channelId)
-    if (!changed(prev, patch)) return
-
-    await kv.set(
-        key(channelId),
-        { ...prev, ...patch },
-        { ex: 60 * 60 * 24 }
-    )
-}
 
 /* ================= RSS ================= */
 async function fetchRssVideoIds(
@@ -134,14 +121,22 @@ async function fetchRssVideoIds(
 /* ================= CORE ================= */
 async function fetchLiveStatus(): Promise<Streamer[]> {
     const STREAMERS = await getStreamers()
-    const stateCache = new Map<string, ChannelState>()
+    const stateMap = await getAllStates()
     const channelCandidates = new Map<string, string[]>()
     const now = Date.now()
 
-    await parallelLimit(STREAMERS, 5, async s => {
-        const state = await getState(s.channelId)
-        stateCache.set(s.channelId, state)
+    let stateDirty = false
+
+    await parallelLimit(STREAMERS, 3, async s => {
+        const state = stateMap[s.channelId] ?? {}
         const lastActive = state.lastActiveAt ?? 0
+
+        if (
+            (state.offlinePolls ?? 0) >= OFFLINE_CONFIRM_POLLS &&
+            now - (state.lastActiveAt ?? 0) < 5 * 60 * 1000
+        ) {
+            return
+        }
 
         const depths =
             now - lastActive < ACTIVE_WINDOW_MS
@@ -156,27 +151,22 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
                 break
             }
 
-            const lastActive = state.lastActiveAt
-            const lastVid = state.lastKnownVideoId
-
             if (
-                !vids.length &&
-                lastActive &&
-                lastVid &&
-                now - lastActive < RSS_GRACE_MS
+                state.lastActiveAt &&
+                state.lastKnownVideoId &&
+                now - state.lastActiveAt < RSS_GRACE_MS
             ) {
-                channelCandidates.set(s.channelId, [lastVid])
+                channelCandidates.set(s.channelId, [state.lastKnownVideoId])
                 break
             }
         }
-
     })
 
     const allVideoIds = Array.from(
         new Set(Array.from(channelCandidates.values()).flat())
     )
-    const chunks = chunk(allVideoIds, 50)
 
+    const chunks = chunk(allVideoIds, 50)
     const videoInfo = new Map<
         string,
         { status: StreamStatus; viewers?: number }
@@ -205,39 +195,47 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
         }
     }
 
-    return Promise.all(STREAMERS.map(async s => {
-        const state = stateCache.get(s.channelId) ?? {}
+    const result = STREAMERS.map(s => {
+        const state = stateMap[s.channelId] ?? {}
         const vids = channelCandidates.get(s.channelId) ?? []
         const hit = vids.find(v => videoInfo.has(v))
         const info = hit ? videoInfo.get(hit) : null
 
         let status: StreamStatus = "offline"
+
         if (info?.status === "live" && hit) {
             status = "live"
-            await setState(s.channelId, {
+            stateMap[s.channelId] = {
                 offlinePolls: 0,
                 lastActiveAt: Date.now(),
                 lastKnownVideoId: hit
-            })
+            }
+            stateDirty = true
         } else if (info?.status === "scheduled") {
             status = hit ? "waiting" : "scheduled"
-            await setState(s.channelId, {
+            stateMap[s.channelId] = {
                 offlinePolls: 0,
-                lastActiveAt: Date.now()
-            })
+                lastActiveAt: Date.now(),
+                lastKnownVideoId: hit
+            }
+            stateDirty = true
         } else {
             const count = (state.offlinePolls ?? 0) + 1
 
             if (count < OFFLINE_CONFIRM_POLLS) {
                 status = "waiting"
-                await setState(s.channelId, {
+                stateMap[s.channelId] = {
+                    ...state,
                     offlinePolls: count,
                     lastActiveAt: Date.now()
-                })
-            } else {
-                await setState(s.channelId, {
-                    offlinePolls: count
-                })
+                }
+                stateDirty = true
+            } else if (state.offlinePolls !== OFFLINE_CONFIRM_POLLS) {
+                stateMap[s.channelId] = {
+                    ...state,
+                    offlinePolls: OFFLINE_CONFIRM_POLLS
+                }
+                stateDirty = true
             }
         }
 
@@ -248,8 +246,13 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
             concurrentViewers: info?.viewers,
         }
     })
-    )
+
+    if (stateDirty) {
+        await setAllStates(stateMap)
+    }
+    return result
 }
+
 
 /* ================= API ================= */
 

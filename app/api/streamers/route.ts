@@ -101,9 +101,7 @@ export async function DELETE(req: Request) {
         return new Response("Streamer not found", { status: 404 })
     }
 
-    await kv.del(`channel:${channelId}`)
     await kv.set(CONFIG_KEY, next)
-
     return NextResponse.json({ ok: true })
 }
 
