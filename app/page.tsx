@@ -11,6 +11,7 @@ type Streamer = {
   liveVideoId?: string
   concurrentViewers?: number
   enabled: boolean
+  groups: string[]
 }
 type Notify = {
   id: string
@@ -85,7 +86,11 @@ export default function Page() {
   /* ================= COMPUTED ================= */
   const visibleStreams = useMemo(() => {
     return streams
-      .filter(s => ["live", "waiting", "scheduled"].includes(s.status) && !!s.liveVideoId && s.enabled)
+      .filter(s =>
+        s.enabled &&
+        s.liveVideoId &&
+        s.status !== "offline"
+      )
       .sort((a, b) => order.indexOf(a.channelId) - order.indexOf(b.channelId))
   }, [streams, order])
 
@@ -162,7 +167,7 @@ export default function Page() {
 
             lastStatusRef.current[r.channelId] = r.status
             const playable = r.status !== "offline" && !!r.liveVideoId
-            return { ...existing, ...r, liveVideoId: playable ? r.liveVideoId : undefined, enabled: existing?.enabled ?? playable }
+            return { ...existing, ...r, liveVideoId: playable ? r.liveVideoId : undefined, enabled: existing?.enabled ?? false }
           })
         })
         localStorage.setItem(STORAGE.lastStatus, JSON.stringify(lastStatusRef.current))
@@ -193,7 +198,13 @@ export default function Page() {
         events: {
           onReady: (e: any) => {
             const isF = s.channelId === focusedId
-            const vol = (!focusedId || isF) ? audioValues.current.masterVolume : (audioValues.current.audioMode === "mute" ? 0 : Math.round(audioValues.current.masterVolume * (audioValues.current.unfocusedVolume / 100)))
+            const isMain = !focusedId || isF
+            const vol = isMain
+              ? audioValues.current.masterVolume
+              : audioValues.current.audioMode === "mute"
+                ? 0
+                : Math.round(audioValues.current.masterVolume *
+                  audioValues.current.unfocusedVolume / 100)
             e.target.setVolume(vol)
             vol === 0 ? e.target.mute() : e.target.unMute()
           }
@@ -236,16 +247,21 @@ export default function Page() {
   }, [notifications])
 
   const footerGroups = useMemo(() => {
-    return (["A4A", "NMC"] as const).map(group => {
-      const members = GROUPS[group]
-      const filtered = streams
-        .filter(s => members.includes(s.name) && (showOffline || s.status !== "offline"))
-        .sort((a, b) => {
-          const p: Record<string, number> = { live: 0, waiting: 1, scheduled: 2, offline: 3 }
-          return p[a.status] - p[b.status]
-        })
-      return { name: group, streams: filtered }
+    const map = new Map<string, Streamer[]>()
+
+    streams.forEach(s => {
+      s.groups?.forEach(g => {
+        if (!map.has(g)) map.set(g, [])
+        map.get(g)!.push(s)
+      })
     })
+
+    return Array.from(map.entries()).map(([name, streams]) => ({
+      name,
+      streams: streams.filter(
+        s => showOffline || s.status !== "offline"
+      ),
+    }))
   }, [streams, showOffline])
 
   useEffect(() => {
@@ -384,18 +400,6 @@ export default function Page() {
 
   /* ================= LOAD CACHE ================= */
   useEffect(() => {
-    const saved = localStorage.getItem("layoutState")
-    if (!saved) return
-
-    try {
-      const parsed = JSON.parse(saved)
-      setStreams(parsed.streams ?? [])
-      setOrder(parsed.order ?? [])
-      setFocusedId(parsed.focusedId ?? null)
-    } catch { }
-  }, [])
-
-  useEffect(() => {
     if (!focusedId) return
 
     setStreams(prev =>
@@ -408,18 +412,6 @@ export default function Page() {
   }, [focusedId])
 
   /* ================= SAVE STATE ================= */
-  useEffect(() => {
-    if (streams.length === 0) return
-    localStorage.setItem(
-      "layoutState",
-      JSON.stringify({
-        streams,
-        order,
-        focusedId,
-      })
-    )
-  }, [streams, order, focusedId])
-
   useEffect(() => {
     const saved = localStorage.getItem("audioPrefs")
     if (!saved) return
@@ -602,9 +594,4 @@ export default function Page() {
       </footer>
     </div >
   )
-}
-
-const GROUPS = {
-  A4A: ["yb", "Tepe46", "Tierison", "bang mister aloy", "ibot13", "youKtheo", "Garry Ang", "Bravyson Vconk", "Niko Junius", "GURAISU", "Michelle Christo", "Jessica Prashela", "Derisky Prisadevano", "Juan Herman", "JAPETLETSDOIT", "Dylan Lauw", "MODE siNclair"],
-  NMC: ["Papuy", "ELJAWZ", "MIRJAAA", "Danny", "Sipije", "zota frz", "a bee gel", "Bopeng", "Anjasmara7", "Lezype", "Gabriel", "Alesya Nina", "Chavilangel", "Maeve Soo", "Lise Zhang", "Dobori Tensha VT", "Gray Wellington", "Apinpalingserius", "Idinzzz", "Kicked417", "Wayne D Veron", "Moonears", "Jaka Triad", "Jacky Jax RP", "Risky Prabu", "nayrdika", "ihsannn", "PaddanG", "Sam Wani", "SEYA", "CYYA", "Qune Chan", "BudyTabootie", "Happy RP", "Dipiw", "Raihan Dwi", "tasya", "LokiTheHuman", "irfan_4tm", "Boujee Girl", "NengEidel", "Intannn", "Wazowsky", "KafeeyInHere", "nenabobo", "hi.juenva", "ItsLin", "dipanggilcuno", "Imed Mettu", "Ronny Bons", "Papa Gejet", "Nanas Art", "Siberian Husky", "Ayus Bangga"],
 }

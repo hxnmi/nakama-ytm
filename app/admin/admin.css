@@ -1,0 +1,159 @@
+.admin {
+    padding: 24px;
+    color: #fff;
+    background: #0f0f14;
+    min-height: 100vh;
+}
+
+.admin h1 {
+    margin-bottom: 16px;
+}
+
+.admin-login,
+.admin-loading {
+    height: 100vh;
+    display: grid;
+    place-items: center;
+    background: #0f0f14;
+}
+
+.admin-login input {
+    padding: 12px 16px;
+    border-radius: 8px;
+    border: none;
+    background: #262633;
+    color: #fff;
+}
+
+.admin-add {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.admin-add input {
+    padding: 6px 10px;
+    background: #262633;
+    border: none;
+    color: #fff;
+    border-radius: 6px;
+}
+
+.admin-add button {
+    background: #22c55e;
+    border: none;
+    color: #000;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.admin-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.admin-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: #181825;
+    padding: 12px;
+    border-radius: 10px;
+}
+
+.admin-main {
+    display: flex;
+    gap: 8px;
+}
+
+.admin-main input {
+    background: #262633;
+    border: none;
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 6px;
+}
+
+.admin-groups {
+    display: flex;
+    gap: 12px;
+    margin: 8px 0;
+    font-size: 12px;
+}
+
+.admin-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.toggle {
+    position: relative;
+    width: 36px;
+    height: 20px;
+}
+
+.toggle input {
+    display: none;
+}
+
+.toggle span {
+    position: absolute;
+    inset: 0;
+    background: #444;
+    border-radius: 999px;
+    cursor: pointer;
+}
+
+.toggle span::after {
+    content: "";
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    top: 2px;
+    left: 2px;
+    background: #fff;
+    border-radius: 50%;
+    transition: 0.2s;
+}
+
+.toggle input:checked+span {
+    background: #22c55e;
+}
+
+.toggle input:checked+span::after {
+    transform: translateX(16px);
+}
+
+.admin-actions .delete {
+    background: #ef4444;
+    border: none;
+    color: #fff;
+    padding: 4px 10px;
+    border-radius: 6px;
+}
+
+.group-option {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: #262633;
+    cursor: pointer;
+    transition: background .2s ease, color .2s ease;
+}
+
+.group-option span {
+    pointer-events: none;
+}
+
+.group-option input {
+    display: none;
+}
+
+.group-option:has(input:checked) {
+    background: #22c55e;
+    color: #000;
+}
