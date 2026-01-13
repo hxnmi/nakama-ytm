@@ -79,8 +79,9 @@ export default function Page() {
   const [subReminders, setSubReminders] =
     useState<Record<string, ReminderState>>({})
 
-  const liveStreams = streams.filter(
-    s => s.status === "live" && !!s.liveVideoId
+  const liveStreams = useMemo(
+    () => streams.filter(s => s.status === "live" && !!s.liveVideoId),
+    [streams]
   )
 
   /* ================= COMPUTED ================= */
@@ -248,6 +249,12 @@ export default function Page() {
 
   const footerGroups = useMemo(() => {
     const map = new Map<string, Streamer[]>()
+    const STATUS_PRIORITY: Record<StreamStatus, number> = {
+      live: 0,
+      waiting: 1,
+      scheduled: 2,
+      offline: 3,
+    }
 
     streams.forEach(s => {
       s.groups?.forEach(g => {
@@ -258,9 +265,12 @@ export default function Page() {
 
     return Array.from(map.entries()).map(([name, streams]) => ({
       name,
-      streams: streams.filter(
-        s => showOffline || s.status !== "offline"
-      ),
+      streams: streams
+        .filter(s => showOffline || s.status !== "offline")
+        .sort(
+          (a, b) =>
+            STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status]
+        ),
     }))
   }, [streams, showOffline])
 
@@ -393,7 +403,10 @@ export default function Page() {
       const added = liveIds.filter(id => !kept.includes(id))
       const nextOrder = [...kept, ...added]
 
-      if (JSON.stringify(nextOrder) === JSON.stringify(prev)) return prev
+      if (
+        prev.length === nextOrder.length &&
+        prev.every((v, i) => v === nextOrder[i])
+      ) return prev
       return nextOrder
     })
   }, [streamKeys])
@@ -410,21 +423,6 @@ export default function Page() {
       )
     )
   }, [focusedId])
-
-  /* ================= SAVE STATE ================= */
-  useEffect(() => {
-    const saved = localStorage.getItem("audioPrefs")
-    if (!saved) return
-
-    try {
-      const parsed: AudioPrefs = JSON.parse(saved)
-      if (parsed.audioMode) setAudioMode(parsed.audioMode)
-      if (typeof parsed.masterVolume === "number")
-        setMasterVolume(parsed.masterVolume)
-      if (typeof parsed.unfocusedVolume === "number")
-        setUnfocusedVolume(parsed.unfocusedVolume)
-    } catch { }
-  }, [])
 
   /* ================= RENDER ================= */
   return (

@@ -92,9 +92,21 @@ async function getState(channelId: string): Promise<ChannelState> {
     return (await kv.get<ChannelState>(key(channelId))) ?? {}
 }
 
+function changed(prev: ChannelState, patch: ChannelState) {
+    return Object.entries(patch).some(
+        ([k, v]) => (prev as any)[k] !== v
+    )
+}
+
 async function setState(channelId: string, patch: ChannelState) {
     const prev = await getState(channelId)
-    await kv.set(key(channelId), { ...prev, ...patch })
+    if (!changed(prev, patch)) return
+
+    await kv.set(
+        key(channelId),
+        { ...prev, ...patch },
+        { ex: 60 * 60 * 24 }
+    )
 }
 
 /* ================= RSS ================= */
@@ -160,7 +172,9 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
 
     })
 
-    const allVideoIds = Array.from(channelCandidates.values()).flat()
+    const allVideoIds = Array.from(
+        new Set(Array.from(channelCandidates.values()).flat())
+    )
     const chunks = chunk(allVideoIds, 50)
 
     const videoInfo = new Map<
