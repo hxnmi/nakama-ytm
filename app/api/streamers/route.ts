@@ -34,6 +34,18 @@ export async function GET(req: Request) {
     return NextResponse.json(config)
 }
 
+async function fetchChannelName(channelId: string) {
+    const res = await fetch(
+        `https://www.googleapis.com/youtube/v3/channels?part=snippet&id=${channelId}&key=${process.env.YT_API_KEY}`
+    )
+
+    if (!res.ok) return null
+
+    const data = await res.json()
+    return data.items?.[0]?.snippet?.title ?? null
+}
+
+
 export async function POST(req: Request) {
     requireAdmin(req)
 
@@ -45,8 +57,13 @@ export async function POST(req: Request) {
             streamers: [],
         }
 
+    const channelName =
+        body.name ??
+        (await fetchChannelName(body.channelId)) ??
+        body.channelId
+
     const streamer: StreamerConfig = {
-        name: body.name,
+        name: channelName,
         channelId: body.channelId,
         groups: body.groups ?? [],
         enabled: body.enabled ?? true,

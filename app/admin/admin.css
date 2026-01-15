@@ -157,3 +157,55 @@
     background: #22c55e;
     color: #000;
 }
+
+.admin-row {
+    cursor: grab;
+}
+
+.admin-row:active {
+    cursor: grabbing;
+    opacity: 0.7;
+}
+
+.admin-toolbar {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.admin-toolbar input {
+    flex: 1;
+    padding: 8px 12px;
+    background: #262633;
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+}
+
+.admin-toolbar select {
+    padding: 8px 12px;
+    background: #262633;
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    cursor: pointer;
+}
+
+.admin-row[draggable="true"] {
+    cursor: grab;
+}
+
+.admin-row[draggable="true"]:active {
+    cursor: grabbing;
+    opacity: 0.7;
+}
+
+.admin-row[draggable="true"]:hover {
+    outline: 1px solid #22c55e55;
+}
+
+.admin-hint {
+    font-size: 12px;
+    opacity: 0.6;
+    margin-bottom: 8px;
+}

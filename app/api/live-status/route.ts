@@ -95,6 +95,17 @@ async function setAllStates(states: ChannelStateMap) {
     await kv.set(CHANNEL_STATE_KEY, states, { ex: 60 * 60 * 24 })
 }
 
+async function fetchChannelName(channelId: string) {
+    const res = await fetch(
+        `https://www.googleapis.com/youtube/v3/channels?part=snippet&id=${channelId}&key=${process.env.YT_API_KEY}`
+    )
+
+    if (!res.ok) return null
+
+    const data = await res.json()
+    return data.items?.[0]?.snippet?.title ?? null
+}
+
 
 /* ================= RSS ================= */
 async function fetchRssVideoIds(
