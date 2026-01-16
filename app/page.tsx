@@ -79,6 +79,9 @@ export default function Page() {
   const [subReminders, setSubReminders] =
     useState<Record<string, ReminderState>>({})
 
+  // NEW: mobile menu open state
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
   const liveStreams = useMemo(
     () => streams.filter(s => s.status === "live" && !!s.liveVideoId),
     [streams]
@@ -128,6 +131,15 @@ export default function Page() {
       document.body.appendChild(tag)
       window.onYouTubeIframeAPIReady = () => setYtReady(true)
     }
+  }, [])
+
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth > 750) setMobileMenuOpen(false)
+    }
+    onResize()
+    window.addEventListener("resize", onResize)
+    return () => window.removeEventListener("resize", onResize)
   }, [])
 
   /* ================= PREFS ================= */
@@ -379,6 +391,15 @@ export default function Page() {
     return () => cancelAnimationFrame(rafId)
   }, [])
 
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth > 750) setMobileMenuOpen(false)
+    }
+    onResize()
+    window.addEventListener("resize", onResize)
+    return () => window.removeEventListener("resize", onResize)
+  }, [])
+
   /* ================= CHAT OVERLAY ================= */
   useEffect(() => {
     if (!focusedId) return
@@ -439,63 +460,131 @@ export default function Page() {
             draggable={false}
           />
           <h1>Nakama Youtube MultiView</h1>
+          <span className="live-count" style={{ marginLeft: 8 }}>
+            LIVE: {liveStreams.length} / {streams.length}
+          </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          {focusedId && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <select
-                value={audioMode}
-                onChange={(e) => setAudioMode(e.target.value as any)}
-                style={{
-                  background: "#262633",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 6,
-                  padding: "4px 8px",
-                  cursor: "pointer",
-                }}
-              >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button
+            className="mobile-menu-button"
+            aria-expanded={mobileMenuOpen}
+            onClick={() => setMobileMenuOpen(prev => !prev)}
+            title="Open menu"
+          >
+            ☰
+          </button>
+          <div className="desktop-controls">
+            {focusedId && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <select
+                  value={audioMode}
+                  onChange={(e) => setAudioMode(e.target.value as any)}
+                  style={{
+                    background: "#262633",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 6,
+                    padding: "4px 8px",
+                    cursor: "pointer",
+                  }}
+                >
+                  <option value="mute">Mute others</option>
+                  <option value="reduce">Reduce others</option>
+                </select>
+
+                {audioMode === "reduce" && (
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={10}
+                    value={isClient ? unfocusedVolume : 30}
+                    onChange={(e) => setUnfocusedVolume(+e.target.value)}
+                    title={`Others volume: ${unfocusedVolume}%`}
+                  />
+                )}
+              </div>
+            )}
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 12, opacity: 0.8 }}>🔊</span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={isClient ? masterVolume : 40}
+                onChange={(e) => setMasterVolume(+e.target.value)}
+                title={`Master volume: ${isClient ? masterVolume : 40}%`}
+              />
+            </div>
+
+            <button
+              onClick={() => setShowOffline(!showOffline)}
+              className={`toggle-pill ${showOffline ? 'enabled' : 'disabled'}`}
+              style={{ background: showOffline ? '#e11d48' : '#262633', border: 'none', color: '#fff', cursor: 'pointer' }}
+            >
+              {showOffline ? "Hide Offline" : "Show Offline"}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {mobileMenuOpen && (
+        <div className="mobile-menu" role="dialog" aria-modal="true">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <strong>Menu</strong>
+            <button onClick={() => setMobileMenuOpen(false)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18 }}>✕</button>
+          </div>
+
+          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: 6 }}>Master volume</label>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={isClient ? masterVolume : 40}
+                onChange={(e) => setMasterVolume(+e.target.value)}
+                title={`Master volume: ${isClient ? masterVolume : 40}%`}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: 6 }}>Audio behavior</label>
+              <select value={audioMode} onChange={(e) => setAudioMode(e.target.value as any)} style={{ width: '100%', padding: '6px 8px', borderRadius: 6, background: '#262633', color: '#fff', border: 'none' }}>
                 <option value="mute">Mute others</option>
                 <option value="reduce">Reduce others</option>
               </select>
+            </div>
 
-              {audioMode === "reduce" && (
+            {audioMode === 'reduce' && (
+              <div>
+                <label style={{ display: 'block', marginBottom: 6 }}>Others volume</label>
                 <input
                   type="range"
                   min={0}
                   max={100}
-                  step={10}
+                  step={1}
                   value={isClient ? unfocusedVolume : 30}
                   onChange={(e) => setUnfocusedVolume(+e.target.value)}
                   title={`Others volume: ${unfocusedVolume}%`}
                 />
-              )}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
+              <button onClick={() => { setShowOffline(prev => !prev); setMobileMenuOpen(false); }} className={`toggle-pill ${showOffline ? 'enabled' : 'disabled'}`} style={{ flex: 1 }}>
+                {showOffline ? "Hide Offline" : "Show Offline"}
+              </button>
+              <button onClick={() => setMobileMenuOpen(false)} style={{ marginLeft: 8, padding: '8px 12px', borderRadius: 8, background: '#262633', color: '#fff', border: 'none' }}>
+                Done
+              </button>
             </div>
-          )}
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 12, opacity: 0.8 }}>🔊</span>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              step={5}
-              value={isClient ? masterVolume : 40}
-              onChange={(e) => setMasterVolume(+e.target.value)}
-              title={`Master volume: ${isClient ? masterVolume : 40}%`}
-            />
           </div>
-          <button
-            onClick={() => setShowOffline(!showOffline)}
-            className={`toggle-pill ${showOffline ? 'enabled' : 'disabled'}`}
-            style={{ background: showOffline ? '#e11d48' : '#262633', border: 'none', color: '#fff', cursor: 'pointer' }}
-          >
-            {showOffline ? "Hide Offline" : "Show Offline"}
-          </button>
-          <span className="live-count">
-            LIVE: {liveStreams.length} / {streams.length}
-          </span>
         </div>
-      </header>
+      )}
+
       <div className={`content ${focusedId ? "focus" : ""}`}>
         <main className={`grid ${focusedId ? "focus" : `grid-${visibleStreams.length}`}`}>
           {visibleStreams.map(s => {
@@ -520,8 +609,8 @@ export default function Page() {
                 </span>
                 {isFocused && reminder?.show && (
                   <div className="sub-reminder">
-                    ⭐ Support {s.name}<br></br>
-                    ⬆️ hover the channel to subscribe!<br></br>
+                    ⭐ Support {s.name}<br />
+                    ⬆️ hover the channel to subscribe!<br />
                     👍 click the title to like!
                     <button
                       onClick={(e) => {
@@ -544,6 +633,7 @@ export default function Page() {
             )
           })}
         </main>
+
         {focusedId && (
           <aside className="chat-panel">
             <iframe
@@ -565,6 +655,7 @@ export default function Page() {
           </aside>
         )}
       </div>
+
       <div className="notify-stack">
         {notifications.map(n => (
           <div key={n.id} className={`notify ${n.type}`}>
@@ -572,9 +663,10 @@ export default function Page() {
           </div>
         ))}
       </div>
+
       <footer className="offline-bar">
         {footerGroups.map(g => (
-          <div key={g.name} className="group-row">
+          <div key={g.name} className="group-row" style={{ alignItems: 'center' }}>
             <span className="group-label">{g.name}</span>
             <div className="group-streams">
               {g.streams.map(s => (
