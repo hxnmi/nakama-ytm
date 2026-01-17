@@ -35,6 +35,12 @@ body {
   cursor: default;
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .desktop-controls {
   display: flex;
   align-items: center;
@@ -56,8 +62,21 @@ body {
 }
 
 .live-count {
+  margin-left: 8;
   font-size: 13px;
   color: #ccc;
+}
+
+.audio-focus-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.volume-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* ================= CONTENT LAYOUT ================= */
@@ -475,6 +494,7 @@ main.grid {
 }
 
 .group-row {
+  align-items: center;
   display: grid;
   grid-template-columns: 40px 1fr;
   align-items: center;
@@ -584,62 +604,38 @@ main.grid {
   pointer-events: auto;
 }
 
-/* ================= RESPONSIVE: <=950px ================= */
-@media screen and (max-width: 950px) {
+/* ================= MOBILE MENU ================= */
+.mobile-menu-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
 
+.mobile-menu-content {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mobile-menu-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* ================= RESPONSIVE: <=1024px ================= */
+@media screen and (max-width: 1024px) and (min-width: 950px) {
   .content.focus {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
-  }
-
-  main.grid.focus {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-    padding: 8px;
-  }
-
-  .chat-panel {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    border-left: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-    height: 360px;
-    min-height: 200px;
-    position: relative;
-    z-index: 2;
-  }
-
-  .offline-bar {
-    padding: 8px 12px;
-  }
-
-  .group-streams {
-    height: 36px;
-    gap: 8px;
-  }
-
-  .toggle-pill {
-    padding: 6px 10px;
-    font-size: 13px;
-    border-radius: 18px;
-  }
-
-  .logo {
-    height: 24px;
-  }
-
-  .header h1 {
-    font-size: 15px;
-  }
-
-  .header {
-    height: 48px;
-    padding: 0 10px;
+    grid-template-rows: 700px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 300px);
   }
 }
 
-/* ================= RESPONSIVE: <=750px ================= */
-@media screen and (max-width: 750px) {
+/* ================= RESPONSIVE: <=950px ================= */
+@media screen and (max-width: 950px) {
   :root {
     --mobile-header-h: 46px;
     --mobile-footer-h: 62px;
@@ -691,6 +687,14 @@ main.grid {
 
   .desktop-controls {
     display: none;
+  }
+
+  .icon-button {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 18px;
+    cursor: pointer;
   }
 
   .mobile-menu-button {
@@ -787,6 +791,7 @@ main.grid {
 
   .toggle-pill {
     font-size: 12px;
+    border-radius: 18px;
   }
 
   .content {
@@ -796,6 +801,15 @@ main.grid {
     overflow: auto;
     -webkit-overflow-scrolling: touch;
     padding: 8px;
+  }
+
+  .content.focus {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 400px;
+  }
+
+  main.grid.focus {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .grid,
@@ -889,10 +903,12 @@ main.grid {
 
   .chat-panel {
     width: 100%;
-    height: 280px;
+    min-height: 200px;
     position: relative;
     border-left: none;
     border-top: 1px solid rgba(255, 255, 255, 0.06);
+    grid-column: 1 / -1;
+    grid-row: 2;
     z-index: 2;
   }
 
@@ -987,6 +1003,14 @@ main.grid {
       height: 220px;
       min-height: 160px;
     }
+  }
+}
+
+/* ================= RESPONSIVE: <=700px ================= */
+@media screen and (max-width: 700px) {
+  .content.focus {
+    grid-template-rows: auto 1fr;
+    grid-template-columns: 1fr;
   }
 }
 

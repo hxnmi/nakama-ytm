@@ -89,13 +89,18 @@ export default function Page() {
 
   /* ================= COMPUTED ================= */
   const visibleStreams = useMemo(() => {
+    const getIndex = (id: string) => {
+      const i = order.indexOf(id)
+      return i === -1 ? Number.MAX_SAFE_INTEGER : i
+    }
+
     return streams
       .filter(s =>
         s.enabled &&
         s.liveVideoId &&
         s.status !== "offline"
       )
-      .sort((a, b) => order.indexOf(a.channelId) - order.indexOf(b.channelId))
+      .sort((a, b) => getIndex(a.channelId) - getIndex(b.channelId))
   }, [streams, order])
 
   const streamKeys = visibleStreams.map(s => s.channelId).join(",")
@@ -133,15 +138,6 @@ export default function Page() {
     }
   }, [])
 
-  useEffect(() => {
-    const onResize = () => {
-      if (window.innerWidth > 750) setMobileMenuOpen(false)
-    }
-    onResize()
-    window.addEventListener("resize", onResize)
-    return () => window.removeEventListener("resize", onResize)
-  }, [])
-
   /* ================= PREFS ================= */
   useEffect(() => {
     audioValues.current = { masterVolume, unfocusedVolume, audioMode }
@@ -151,7 +147,7 @@ export default function Page() {
   useEffect(() => {
     if (!isClient || streams.length === 0) return
     localStorage.setItem(STORAGE.layout, JSON.stringify({ streams, order, focusedId }))
-  },)
+  }, [streams, order, focusedId, isClient])
 
   /* ================= API SYNC ================= */
   useEffect(() => {
@@ -232,6 +228,13 @@ export default function Page() {
       }
     })
   }, [ytReady, streamKeys])
+
+  useEffect(() => {
+    return () => {
+      Object.values(players.current).forEach(p => p?.destroy?.())
+      players.current = {}
+    }
+  }, [])
 
   /* ================= AUDIO CONTROL ================= */
   useEffect(() => {
@@ -393,7 +396,7 @@ export default function Page() {
 
   useEffect(() => {
     const onResize = () => {
-      if (window.innerWidth > 750) setMobileMenuOpen(false)
+      if (window.innerWidth > 900) setMobileMenuOpen(false)
     }
     onResize()
     window.addEventListener("resize", onResize)
@@ -460,11 +463,11 @@ export default function Page() {
             draggable={false}
           />
           <h1>Nakama Youtube MultiView</h1>
-          <span className="live-count" style={{ marginLeft: 8 }}>
+          <span className="live-count">
             LIVE: {liveStreams.length} / {streams.length}
           </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <button
             className="mobile-menu-button"
             aria-expanded={mobileMenuOpen}
@@ -475,7 +478,7 @@ export default function Page() {
           </button>
           <div className="desktop-controls">
             {focusedId && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div className="audio-focus-controls" style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <select
                   value={audioMode}
                   onChange={(e) => setAudioMode(e.target.value as any)}
@@ -505,7 +508,7 @@ export default function Page() {
                 )}
               </div>
             )}
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div className="volume-group" style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ fontSize: 12, opacity: 0.8 }}>🔊</span>
               <input
                 type="range"
@@ -531,12 +534,12 @@ export default function Page() {
 
       {mobileMenuOpen && (
         <div className="mobile-menu" role="dialog" aria-modal="true">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <div className="mobile-menu-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
             <strong>Menu</strong>
-            <button onClick={() => setMobileMenuOpen(false)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18 }}>✕</button>
+            <button onClick={() => setMobileMenuOpen(false)} className="icon-button">✕</button>
           </div>
 
-          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="mobile-menu-content" style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div>
               <label style={{ display: 'block', marginBottom: 6 }}>Master volume</label>
               <input
@@ -573,7 +576,7 @@ export default function Page() {
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
+            <div className="mobile-menu-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
               <button onClick={() => { setShowOffline(prev => !prev); setMobileMenuOpen(false); }} className={`toggle-pill ${showOffline ? 'enabled' : 'disabled'}`} style={{ flex: 1 }}>
                 {showOffline ? "Hide Offline" : "Show Offline"}
               </button>
@@ -666,7 +669,7 @@ export default function Page() {
 
       <footer className="offline-bar">
         {footerGroups.map(g => (
-          <div key={g.name} className="group-row" style={{ alignItems: 'center' }}>
+          <div key={g.name} className="group-row">
             <span className="group-label">{g.name}</span>
             <div className="group-streams">
               {g.streams.map(s => (
