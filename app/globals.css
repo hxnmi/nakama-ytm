@@ -56,12 +56,16 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 0 12px;
+  position: relative;
+  z-index: 10000;
 }
 
 .header-left {
   display: flex;
   align-items: center;
   gap: 10px;
+  overflow: visible;
+  user-select: none;
 }
 
 .logo {
@@ -137,12 +141,12 @@ body {
 
 .mobile-menu-button {
   display: none;
+  border: 1px solid var(--border);
 }
 
 .header button,
 .toggle-pill {
   background: var(--panel-2);
-  border: 1px solid var(--border);
   transition: background 0.15s ease, transform 0.1s ease;
 }
 
@@ -161,8 +165,9 @@ body {
   width: 100%;
   flex: 1;
   min-height: 0;
-  overflow: hidden;
   padding-bottom: 87px;
+  position: relative;
+  z-index: 1;
 }
 
 /* ================= CANVAS ================= */
@@ -171,9 +176,10 @@ body {
   gap: 10px;
   padding: 10px;
   height: 100%;
-  overflow: hidden;
   min-height: 0;
   align-content: stretch;
+  position: relative;
+  z-index: 1;
 }
 
 .chat-column {
@@ -382,7 +388,6 @@ body {
   color: var(--text);
 }
 
-
 /* ================= FOOTER (UNCHANGED LOGIC) ================= */
 .offline-bar {
   position: fixed;
@@ -551,6 +556,14 @@ body {
   cursor: pointer;
 }
 
+
+/* ================= CUSTOM STREAM ================= */
+
+.stream-input-combo {
+  position: relative;
+  z-index: 50;
+}
+
 select {
   max-width: 160px;
   text-overflow: ellipsis;
@@ -581,23 +594,10 @@ select {
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 6px 28px 6px 12px;
+  padding-right: 36px;
 
   cursor: text;
   position: relative;
-}
-
-/* arrow */
-.select-like::after {
-  content: "";
-  position: absolute;
-  right: 12px;
-  top: 50%;
-  width: 6px;
-  height: 6px;
-  transform: translateY(-50%) rotate(45deg);
-  border-right: 2px solid #aaa;
-  border-bottom: 2px solid #aaa;
-  pointer-events: none;
 }
 
 .select-like input {
@@ -613,6 +613,7 @@ select {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
+  right: 0;
   width: 100%;
   background: var(--panel);
   border: 1px solid var(--border);
@@ -620,6 +621,7 @@ select {
   padding: 6px;
   z-index: 999;
   box-shadow: 0 10px 30px rgba(0, 0, 0, .4);
+  pointer-events: auto;
 }
 
 .select-item {
@@ -671,6 +673,31 @@ select {
 .select-item button:hover {
   opacity: 1;
 }
+
+.dropdown-toggle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 28px;
+  height: 100%;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.dropdown-toggle::before {
+  content: "";
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  transform: translateY(-50%) rotate(45deg);
+  border-right: 2px solid #aaa;
+  border-bottom: 2px solid #aaa;
+}
+
 
 /* ================= MOBILE ================= */
 @media (max-width: 1024px) {

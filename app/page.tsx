@@ -782,7 +782,6 @@ export default function Page() {
           />
 
           <button
-            type="button"
             className="dropdown-toggle"
             onClick={() => setDropdownOpen((v: boolean) => !v)}
             aria-label="Toggle dropdown"
@@ -875,7 +874,7 @@ export default function Page() {
   return (
     <div className={`app theme-${theme}`}>
       <header className="header">
-        <div className="header-left" onClick={(e) => e.preventDefault()}>
+        <div className="header-left">
           <div className="logo-tooltip">
             <img
               src="/FULL-LOGO-NMC.png"
@@ -968,7 +967,7 @@ export default function Page() {
             <button
               onClick={() => setShowOffline(!showOffline)}
               className={`ui-btn ${showOffline ? 'enabled' : 'disabled'}`}
-              style={{ background: showOffline ? '#e11d48' : 'var(--panel-2)', border: 'none', color: 'var(--text)', cursor: 'pointer' }}
+              style={{ background: showOffline ? '#e11d48' : 'var(--panel-2)', color: 'var(--text)', cursor: 'pointer' }}
             >
               {showOffline ? "Hide Offline" : "Show Offline"}
             </button>
