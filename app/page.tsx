@@ -37,7 +37,8 @@ const STORAGE = {
   audio: "audioPrefs",
   lastStatus: "lastStreamStatus",
   subReminder: "subReminderState",
-  showChat: "showChat"
+  showChat: "showChat",
+  customStreams: "customStreams"
 }
 
 export default function Page() {
@@ -73,22 +74,23 @@ export default function Page() {
     useState<Record<string, ReminderState>>({})
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [isMobile, setIsMobile] = useState(false)
-  const [isCompactTitle, setIsCompactTitle] = useState(false)
-  const [isVerySmall, setIsVerySmall] = useState(false);
 
   const [showChat, setShowChat] = useState<boolean>(false)
 
   const [theme, setTheme] = useState<"dark" | "light">("dark")
+  const [mounted, setMounted] = useState(false)
 
-  const liveStreams = useMemo(
-    () => streams.filter(s => s.status === "live" && !!s.liveVideoId),
-    [streams]
-  )
+  const liveCount = streams.filter(s => s.status === "live").length
 
   const [streamInput, setStreamInput] = useState("")
   const [customStreams, setCustomStreams] = useState<Streamer[]>([])
   const [dropdownOpen, setDropdownOpen] = useState(false)
+
+  const [viewport, setViewport] = useState({ w: 0 })
+
+  const isMobile = viewport.w <= 768
+  const isVerySmall = viewport.w < 500
+  const isCompactTitle = viewport.w < 1120
 
   /* ================= COMPUTED ================= */
   const visibleStreams = useMemo(() => {
@@ -106,7 +108,10 @@ export default function Page() {
       .sort((a, b) => getIndex(a.channelId) - getIndex(b.channelId))
   }, [streams, order])
 
-  const streamKeys = visibleStreams.map(s => s.channelId).join(",")
+  const streamMap = useMemo(
+    () => new Map(visibleStreams.map(s => [s.channelId, s])),
+    [visibleStreams]
+  )
 
   const layout = useMemo(() => {
     const videoCount = visibleStreams.length
@@ -172,7 +177,7 @@ export default function Page() {
           })),
         }
       }
-      if (videoCount > 4 && videoCount === 10 || isMobile) {
+      if (videoCount <= 10) {
         const cols = 2
         const rows = Math.ceil(videoCount / cols)
         return {
@@ -185,8 +190,21 @@ export default function Page() {
           })),
         }
       }
+      if (videoCount > 10) {
+        const cols = 3
+        const rows = Math.ceil(videoCount / cols)
+        return {
+          cols,
+          rows,
+          mode: "mobile",
+          cells: Array.from({ length: videoCount }, (_, i) => ({
+            type: "video" as const,
+            channelId: visibleStreams[i]?.channelId,
+          })),
+        }
+      }
     }
-    if (!showChat || videoCount >= 5 || (isMobile && videoCount > 10)) {
+    if (!showChat || videoCount >= 5) {
       const cols = Math.ceil(Math.sqrt(videoCount))
       const rows = Math.ceil(videoCount / cols)
       return {
@@ -199,7 +217,6 @@ export default function Page() {
         })),
       }
     }
-    // side by side chat for small counts
     if (videoCount === 0) {
       return { cols: 0, rows: 0, mode: "grid" as "grid", cells: [] }
     }
@@ -271,7 +288,7 @@ export default function Page() {
         channelId: visibleStreams[i]?.channelId,
       })),
     }
-  }, [visibleStreams, showChat])
+  }, [visibleStreams, showChat, isMobile, focusedId])
 
   /* ================= INITIAL LOAD ================= */
   useEffect(() => {
@@ -313,6 +330,14 @@ export default function Page() {
     }
   }, [])
 
+  useEffect(() => {
+    setMounted(true)
+    const saved = localStorage.getItem("theme")
+    if (saved === "light" || saved === "dark") {
+      setTheme(saved)
+    }
+  }, [])
+
   /* ================= PREFS ================= */
   useEffect(() => {
     audioValues.current = { masterVolume, unfocusedVolume, audioMode }
@@ -328,6 +353,11 @@ export default function Page() {
     if (!isClient) return
     localStorage.setItem(STORAGE.showChat, String(showChat))
   }, [showChat, isClient])
+
+  useEffect(() => {
+    if (!mounted) return
+    localStorage.setItem("theme", theme)
+  }, [theme, mounted])
 
   useEffect(() => {
     const saved = localStorage.getItem("customStreams")
@@ -447,12 +477,9 @@ export default function Page() {
     try {
       const u = new URL(url)
 
-      // youtu.be/<id>
       if (u.hostname.includes("youtu.be")) {
         return u.pathname.replace("/", "")
       }
-
-      // youtube.com/watch?v=<id>
       if (u.searchParams.has("v")) {
         return u.searchParams.get("v")
       }
@@ -473,6 +500,19 @@ export default function Page() {
       groups: ["Custom"],
     }
   }
+
+  useEffect(() => {
+    const activeIds = new Set(
+      streams.filter(s => s.liveVideoId).map(s => s.channelId)
+    )
+
+    Object.keys(players.current).forEach(id => {
+      if (!activeIds.has(id)) {
+        players.current[id].destroy()
+        delete players.current[id]
+      }
+    })
+  }, [streams])
 
   /* ================= AUDIO CONTROL ================= */
   useEffect(() => {
@@ -503,8 +543,9 @@ export default function Page() {
     mute: boolean
   ) {
     try {
-      // Force player into a state where audio changes are accepted
-      player.playVideo?.()
+      if (!mute && volume > 0) {
+        player.playVideo?.()
+      }
     } catch { }
 
     requestAnimationFrame(() => {
@@ -701,9 +742,6 @@ export default function Page() {
     )
   }
 
-  const [selectedCustomId, setSelectedCustomId] =
-    useState<string | null>(null)
-
   function removeCustomStream(id: string) {
     setCustomStreams(prev =>
       prev.filter(s => s.channelId !== id)
@@ -721,8 +759,6 @@ export default function Page() {
     if (focusedId === id) {
       setFocusedId(null)
     }
-
-    setSelectedCustomId(null)
   }
 
   function StreamInputCombo({
@@ -772,7 +808,10 @@ export default function Page() {
 
                   <button
                     title="Remove"
-                    onClick={() => removeCustomStream(s.channelId)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      removeCustomStream(s.channelId)
+                    }}
                   >
                     ❌
                   </button>
@@ -780,40 +819,23 @@ export default function Page() {
               </div>
             ))}
           </div>
-        )}
-      </div>
+        )
+        }
+      </div >
     );
   }
 
   useEffect(() => {
-    const check = () => setIsCompactTitle(window.innerWidth < 1120)
-    check()
-    window.addEventListener("resize", check)
-    return () => window.removeEventListener("resize", check)
-  }, [])
-
-  useEffect(() => {
-    const onResize = () => {
-      if (window.innerWidth > 900) setMobileMenuOpen(false)
+    const update = () => {
+      const w = window.innerWidth
+      setViewport({ w })
+      if (w > 900) setMobileMenuOpen(false)
     }
-    onResize()
-    window.addEventListener("resize", onResize)
-    return () => window.removeEventListener("resize", onResize)
-  }, [])
 
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth <= 768)
-    check()
-    window.addEventListener("resize", check)
-    return () => window.removeEventListener("resize", check)
+    update()
+    window.addEventListener("resize", update)
+    return () => window.removeEventListener("resize", update)
   }, [])
-
-  useEffect(() => {
-    const check = () => setIsVerySmall(window.innerWidth < 500);
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
-  }, []);
 
   /* ================= SYNC ORDER ================= */
   useEffect(() => {
@@ -831,7 +853,7 @@ export default function Page() {
       ) return prev
       return nextOrder
     })
-  }, [streamKeys])
+  }, [visibleStreams])
 
   /* ================= LOAD CACHE ================= */
   useEffect(() => {
@@ -846,6 +868,9 @@ export default function Page() {
     )
   }, [focusedId])
 
+  if (!mounted) {
+    return <div className="app theme-dark" />
+  }
   /* ================= RENDER ================= */
   return (
     <div className={`app theme-${theme}`}>
@@ -867,12 +892,12 @@ export default function Page() {
             {isCompactTitle ? (
               <span>
                 LIVE:<br />
-                {liveStreams.length} / {streams.length}
+                {liveCount} / {streams.length}
               </span>
 
             ) : (
               <span>
-                LIVE: {liveStreams.length} / {streams.length}
+                LIVE: {liveCount} / {streams.length}
               </span>
             )}
           </span>
@@ -1043,7 +1068,7 @@ export default function Page() {
         >
           {layout.cells.map((cell, i) => {
             if (cell.type === "video") {
-              const s = visibleStreams.find(v => v.channelId === cell.channelId)
+              const s = streamMap.get(cell.channelId)
               if (!s) return <div key={`empty-video-${i}`} />
 
               const isFocused = s.channelId === focusedId
@@ -1103,7 +1128,7 @@ export default function Page() {
               )
             }
             if (cell.type === "chat") {
-              const s = visibleStreams.find(v => v.channelId === cell.channelId)
+              const s = streamMap.get(cell.channelId)
               if (!s) return <div key={`empty-chat-${i}`} />
               const chatSrc = `https://www.youtube.com/live_chat?v=${s.liveVideoId}&embed_domain=${host}&dark_theme=${theme === "dark" ? 1 : 0}`
               return (

@@ -762,7 +762,6 @@ select {
   }
 
   .canvas {
-    /* grid-auto-rows: minmax(min-content, max-content); */
     align-content: start;
     overflow-y: auto;
     padding: 5px;
