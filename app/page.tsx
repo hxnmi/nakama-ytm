@@ -19,12 +19,6 @@ type Notify = {
   type: "live" | "info"
 }
 
-type AudioPrefs = {
-  audioMode: "mute" | "reduce"
-  masterVolume: number
-  unfocusedVolume: number
-}
-
 type ReminderState = {
   show: boolean
   lastShownAt?: number
@@ -42,7 +36,8 @@ const STORAGE = {
   layout: "layoutState",
   audio: "audioPrefs",
   lastStatus: "lastStreamStatus",
-  subReminder: "subReminderState"
+  subReminder: "subReminderState",
+  showChat: "showChat"
 }
 
 export default function Page() {
@@ -72,20 +67,28 @@ export default function Page() {
   const [masterVolume, setMasterVolume] = useState<number>(40)
   const [unfocusedVolume, setUnfocusedVolume] = useState<number>(30)
 
-  const [chatLoading, setChatLoading] = useState(false)
-  const [chatUnavailable, setChatUnavailable] = useState(false)
   const [notifications, setNotifications] = useState<Notify[]>([])
 
   const [subReminders, setSubReminders] =
     useState<Record<string, ReminderState>>({})
 
-  // NEW: mobile menu open state
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+  const [isCompactTitle, setIsCompactTitle] = useState(false)
+  const [isVerySmall, setIsVerySmall] = useState(false);
+
+  const [showChat, setShowChat] = useState<boolean>(false)
+
+  const [theme, setTheme] = useState<"dark" | "light">("dark")
 
   const liveStreams = useMemo(
     () => streams.filter(s => s.status === "live" && !!s.liveVideoId),
     [streams]
   )
+
+  const [streamInput, setStreamInput] = useState("")
+  const [customStreams, setCustomStreams] = useState<Streamer[]>([])
+  const [dropdownOpen, setDropdownOpen] = useState(false)
 
   /* ================= COMPUTED ================= */
   const visibleStreams = useMemo(() => {
@@ -105,12 +108,182 @@ export default function Page() {
 
   const streamKeys = visibleStreams.map(s => s.channelId).join(",")
 
+  const layout = useMemo(() => {
+    const videoCount = visibleStreams.length
+    if (isMobile) {
+      const ids = visibleStreams.map(s => s.channelId)
+      const activeId = focusedId ?? ids[0]
+
+      if (videoCount === 1 && showChat) {
+        return {
+          cols: 1,
+          rows: 2,
+          mode: "mobile-longchat",
+          cells: [
+            { type: "video", channelId: activeId },
+            { type: "chat", channelId: activeId, rowSpan: 1 },
+          ],
+        }
+      }
+      if (videoCount === 1) {
+        return {
+          cols: 1,
+          rows: 1,
+          mode: "mobile",
+          cells: [
+            { type: "video", channelId: activeId },
+          ],
+        }
+      }
+
+      if (videoCount === 2 && showChat) {
+        return {
+          cols: 1,
+          rows: 3,
+          mode: "mobile",
+          cells: [
+            { type: "video", channelId: ids[0] },
+            { type: "video", channelId: ids[1] },
+            { type: "chat", channelId: activeId },
+          ],
+        }
+      }
+
+      if (videoCount === 2) {
+        return {
+          cols: 1,
+          rows: 2,
+          mode: "mobile",
+          cells: ids.map(id => ({
+            type: "video",
+            channelId: id,
+          })),
+        }
+      }
+
+      if (videoCount === 3) {
+        return {
+          cols: 1,
+          rows: 3,
+          mode: "mobile",
+          cells: ids.map(id => ({
+            type: "video",
+            channelId: id,
+          })),
+        }
+      }
+      if (videoCount > 4 && videoCount === 10 || isMobile) {
+        const cols = 2
+        const rows = Math.ceil(videoCount / cols)
+        return {
+          cols,
+          rows,
+          mode: "mobile",
+          cells: Array.from({ length: videoCount }, (_, i) => ({
+            type: "video" as const,
+            channelId: visibleStreams[i]?.channelId,
+          })),
+        }
+      }
+    }
+    if (!showChat || videoCount >= 5 || (isMobile && videoCount > 10)) {
+      const cols = Math.ceil(Math.sqrt(videoCount))
+      const rows = Math.ceil(videoCount / cols)
+      return {
+        cols,
+        rows,
+        mode: "grid" as "grid",
+        cells: Array.from({ length: videoCount }, (_, i) => ({
+          type: "video" as const,
+          channelId: visibleStreams[i]?.channelId,
+        })),
+      }
+    }
+    // side by side chat for small counts
+    if (videoCount === 0) {
+      return { cols: 0, rows: 0, mode: "grid" as "grid", cells: [] }
+    }
+    if (videoCount === 1) {
+      return {
+        cols: 2,
+        rows: 1,
+        mode: "sidechat" as "sidechat",
+        cells: [
+          { type: "video" as const, channelId: visibleStreams[0].channelId },
+          { type: "chat" as const, channelId: visibleStreams[0].channelId },
+        ],
+      }
+    }
+    if (videoCount === 2) {
+      return {
+        cols: 2,
+        rows: 2,
+        mode: "sidechat" as "sidechat",
+        cells: [
+          { type: "video" as const, channelId: visibleStreams[0].channelId },
+          { type: "chat" as const, channelId: visibleStreams[0].channelId },
+          { type: "video" as const, channelId: visibleStreams[1].channelId },
+          { type: "chat" as const, channelId: visibleStreams[1].channelId },
+        ],
+      }
+    }
+    if (videoCount === 3) {
+      const ids = visibleStreams.map(s => s.channelId)
+      const cells: { type: "video" | "chat", channelId: string }[] = []
+      for (let i = 0; i < 3; i++) {
+        cells.push({ type: i % 2 === 0 ? "video" : "chat", channelId: ids[i] })
+      }
+      for (let i = 0; i < 3; i++) {
+        cells.push({ type: i % 2 === 0 ? "chat" : "video", channelId: ids[i] })
+      }
+      return {
+        cols: 3,
+        rows: 2,
+        mode: "grid" as "grid",
+        cells,
+      }
+    }
+    if (videoCount === 4) {
+      const ids = visibleStreams.map(s => s.channelId)
+      return {
+        cols: 4,
+        rows: 2,
+        mode: "grid" as "grid",
+        cells: [
+          { type: "video" as const, channelId: ids[0] },
+          { type: "chat" as const, channelId: ids[0] },
+          { type: "chat" as const, channelId: ids[1] },
+          { type: "video" as const, channelId: ids[1] },
+
+          { type: "video" as const, channelId: ids[2] },
+          { type: "chat" as const, channelId: ids[2] },
+          { type: "chat" as const, channelId: ids[3] },
+          { type: "video" as const, channelId: ids[3] },
+        ],
+      }
+    }
+    return {
+      cols: videoCount,
+      rows: 1,
+      mode: "grid" as "grid",
+      cells: Array.from({ length: videoCount }, (_, i) => ({
+        type: "video" as const,
+        channelId: visibleStreams[i]?.channelId,
+      })),
+    }
+  }, [visibleStreams, showChat])
+
   /* ================= INITIAL LOAD ================= */
   useEffect(() => {
     setIsClient(true)
     setHost(window.location.hostname)
 
     try {
+      const savedChat = localStorage.getItem(STORAGE.showChat)
+      if (savedChat !== null) {
+        setShowChat(savedChat === "true")
+      }
+
       const savedAudio = localStorage.getItem(STORAGE.audio)
       if (savedAudio) {
         const p = JSON.parse(savedAudio)
@@ -119,7 +292,9 @@ export default function Page() {
       const savedLayout = localStorage.getItem(STORAGE.layout)
       if (savedLayout) {
         const p = JSON.parse(savedLayout)
-        if (p.streams) setStreams(p.streams); if (p.order) setOrder(p.order); if (p.focusedId) setFocusedId(p.focusedId)
+        if (p.streams) setStreams(p.streams)
+        if (p.order) setOrder(p.order)
+        if (p.focusedId) setFocusedId(p.focusedId)
       }
     } catch (e) { console.error("Cache load failed", e) }
 
@@ -149,6 +324,25 @@ export default function Page() {
     localStorage.setItem(STORAGE.layout, JSON.stringify({ streams, order, focusedId }))
   }, [streams, order, focusedId, isClient])
 
+  useEffect(() => {
+    if (!isClient) return
+    localStorage.setItem(STORAGE.showChat, String(showChat))
+  }, [showChat, isClient])
+
+  useEffect(() => {
+    const saved = localStorage.getItem("customStreams")
+    if (saved) {
+      setCustomStreams(JSON.parse(saved))
+    }
+  }, [])
+
+  useEffect(() => {
+    localStorage.setItem(
+      "customStreams",
+      JSON.stringify(customStreams)
+    )
+  }, [customStreams])
+
   /* ================= API SYNC ================= */
   useEffect(() => {
     const fetchStatus = async () => {
@@ -158,7 +352,7 @@ export default function Page() {
 
         setStreams(prev => {
           const map = new Map(prev.map(p => [p.channelId, p]))
-          return data.map(r => {
+          const apiStreams = data.map(r => {
             const existing = map.get(r.channelId)
             const prevS = lastStatusRef.current[r.channelId]
 
@@ -178,6 +372,10 @@ export default function Page() {
             const playable = r.status !== "offline" && !!r.liveVideoId
             return { ...existing, ...r, liveVideoId: playable ? r.liveVideoId : undefined, enabled: existing?.enabled ?? false }
           })
+          const custom = prev.filter(p =>
+            p.channelId.startsWith("custom-")
+          )
+          return [...apiStreams, ...custom]
         })
         localStorage.setItem(STORAGE.lastStatus, JSON.stringify(lastStatusRef.current))
       } catch (e) { console.error(e) }
@@ -192,67 +390,134 @@ export default function Page() {
     return () => clearInterval(t)
   }, [isClient])
 
-  /* ================= PLAYERS MANAGER ================= */
+  /* ================= PLAYERS ================= */
   useEffect(() => {
     if (!ytReady) return
 
-    visibleStreams.forEach(s => {
+    streams.forEach(s => {
+      if (!s.liveVideoId || s.status === "offline") return
+
       const id = s.channelId
       const el = document.getElementById(`player-${id}`)
-      if (!el || players.current[id]) return
+      if (!el) return
+
+      if (players.current[id]) return
 
       players.current[id] = new window.YT.Player(el, {
         videoId: s.liveVideoId,
-        playerVars: { autoplay: 1, playsinline: 1, rel: 0, enablejsapi: 1 },
+        playerVars: {
+          autoplay: 1,
+          playsinline: 1,
+          rel: 0,
+          enablejsapi: 1,
+        },
         events: {
           onReady: (e: any) => {
-            const isF = s.channelId === focusedId
-            const isMain = !focusedId || isF
+            const isFocused = id === focusedId
+            const isMain = !focusedId || isFocused
+
             const vol = isMain
               ? audioValues.current.masterVolume
               : audioValues.current.audioMode === "mute"
                 ? 0
-                : Math.round(audioValues.current.masterVolume *
-                  audioValues.current.unfocusedVolume / 100)
+                : Math.round(
+                  audioValues.current.masterVolume *
+                  audioValues.current.unfocusedVolume / 100
+                )
+
             e.target.setVolume(vol)
             vol === 0 ? e.target.mute() : e.target.unMute()
-          }
-        }
+          },
+        },
       })
     })
+  }, [ytReady, streams])
 
-    Object.keys(players.current).forEach(id => {
-      if (!visibleStreams.find(s => s.channelId === id)) {
-        players.current[id]?.destroy?.()
+  useEffect(() => {
+    streams.forEach(s => {
+      const id = s.channelId
+      if (!s.enabled && players.current[id]) {
+        players.current[id].destroy()
         delete players.current[id]
       }
     })
-  }, [ytReady, streamKeys])
+  }, [streams])
 
-  useEffect(() => {
-    return () => {
-      Object.values(players.current).forEach(p => p?.destroy?.())
-      players.current = {}
+  function extractYouTubeVideoId(url: string): string | null {
+    try {
+      const u = new URL(url)
+
+      // youtu.be/<id>
+      if (u.hostname.includes("youtu.be")) {
+        return u.pathname.replace("/", "")
+      }
+
+      // youtube.com/watch?v=<id>
+      if (u.searchParams.has("v")) {
+        return u.searchParams.get("v")
+      }
+
+      return null
+    } catch {
+      return null
     }
-  }, [])
+  }
+
+  function createCustomStreamer(videoId: string): Streamer {
+    return {
+      name: `Custom Stream`,
+      channelId: `custom-${videoId}`,
+      status: "live",
+      liveVideoId: videoId,
+      enabled: true,
+      groups: ["Custom"],
+    }
+  }
 
   /* ================= AUDIO CONTROL ================= */
   useEffect(() => {
     Object.entries(players.current).forEach(([id, player]) => {
-      if (!player?.setVolume) return
+      if (!player) return
+
       const isFocused = id === focusedId
-      if (!focusedId || isFocused) {
-        player.unMute()
-        player.setVolume(masterVolume)
-      } else {
-        if (audioMode === "mute") player.mute()
-        else {
-          player.unMute()
-          player.setVolume(Math.round(masterVolume * (unfocusedVolume / 100)))
-        }
-      }
+      const isMain = !focusedId || isFocused
+
+      const vol = isMain
+        ? masterVolume
+        : audioMode === "mute"
+          ? 0
+          : Math.round(masterVolume * (unfocusedVolume / 100))
+
+      safeApplyAudio(
+        player,
+        vol,
+        !isMain && audioMode === "mute"
+      )
     })
   }, [focusedId, audioMode, unfocusedVolume, masterVolume])
+
+
+  function safeApplyAudio(
+    player: any,
+    volume: number,
+    mute: boolean
+  ) {
+    try {
+      // Force player into a state where audio changes are accepted
+      player.playVideo?.()
+    } catch { }
+
+    requestAnimationFrame(() => {
+      try {
+        if (mute || volume === 0) {
+          player.mute?.()
+        } else {
+          player.unMute?.()
+          player.setVolume?.(volume)
+        }
+      } catch { }
+    })
+  }
 
   /* ================= UI HELPERS ================= */
   useEffect(() => {
@@ -395,6 +660,139 @@ export default function Page() {
   }, [])
 
   useEffect(() => {
+    setStreams(prev => {
+      const apiStreams = prev.filter(s => !s.channelId.startsWith("custom-"))
+      return [...apiStreams, ...customStreams]
+    })
+  }, [customStreams])
+
+  function addCustomStream() {
+    const videoId = extractYouTubeVideoId(streamInput)
+    if (!videoId) {
+      alert("Invalid YouTube link")
+      return
+    }
+
+    const channelId = `custom-${videoId}`
+
+    setCustomStreams(prev => {
+      if (prev.some(s => s.channelId === channelId)) return prev
+      return [...prev, createCustomStreamer(videoId)]
+    })
+
+    setStreamInput("")
+  }
+
+  function toggleCustomEnabled(id: string) {
+    setStreams(prev =>
+      prev.map(p =>
+        p.channelId === id
+          ? { ...p, enabled: !p.enabled }
+          : p
+      )
+    )
+
+    setCustomStreams(prev =>
+      prev.map(p =>
+        p.channelId === id
+          ? { ...p, enabled: !p.enabled }
+          : p
+      )
+    )
+  }
+
+  const [selectedCustomId, setSelectedCustomId] =
+    useState<string | null>(null)
+
+  function removeCustomStream(id: string) {
+    setCustomStreams(prev =>
+      prev.filter(s => s.channelId !== id)
+    )
+
+    setStreams(prev =>
+      prev.filter(s => s.channelId !== id)
+    )
+
+    if (players.current[id]) {
+      players.current[id].destroy()
+      delete players.current[id]
+    }
+
+    if (focusedId === id) {
+      setFocusedId(null)
+    }
+
+    setSelectedCustomId(null)
+  }
+
+  function StreamInputCombo({
+    streamInput,
+    setStreamInput,
+    addCustomStream,
+    dropdownOpen,
+    setDropdownOpen,
+    customStreams,
+    toggleCustomEnabled,
+    removeCustomStream,
+  }: any) {
+    return (
+      <div className="stream-input-combo" style={{ position: "relative" }}>
+        <div className="select-like">
+          <input
+            placeholder="Paste Custom Live link..."
+            value={streamInput}
+            onChange={e => setStreamInput(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && addCustomStream()}
+          />
+
+          <button
+            type="button"
+            className="dropdown-toggle"
+            onClick={() => setDropdownOpen((v: boolean) => !v)}
+            aria-label="Toggle dropdown"
+          />
+        </div>
+
+        {dropdownOpen && (
+          <div className="select-dropdown">
+            {customStreams.map((s: any) => (
+              <div
+                key={s.channelId}
+                className={`select-item ${s.enabled ? "enabled" : "disabled"}`}
+                onClick={() => toggleCustomEnabled(s.channelId)}
+              >
+                <div
+                  className="left"
+                >
+                  <span className="dot" />
+                  <span className="name">{s.name}</span>
+                </div>
+
+                <div className="actions">
+
+                  <button
+                    title="Remove"
+                    onClick={() => removeCustomStream(s.channelId)}
+                  >
+                    ❌
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  useEffect(() => {
+    const check = () => setIsCompactTitle(window.innerWidth < 1120)
+    check()
+    window.addEventListener("resize", check)
+    return () => window.removeEventListener("resize", check)
+  }, [])
+
+  useEffect(() => {
     const onResize = () => {
       if (window.innerWidth > 900) setMobileMenuOpen(false)
     }
@@ -403,19 +801,19 @@ export default function Page() {
     return () => window.removeEventListener("resize", onResize)
   }, [])
 
-  /* ================= CHAT OVERLAY ================= */
   useEffect(() => {
-    if (!focusedId) return
+    const check = () => setIsMobile(window.innerWidth <= 768)
+    check()
+    window.addEventListener("resize", check)
+    return () => window.removeEventListener("resize", check)
+  }, [])
 
-    setChatLoading(true)
-    setChatUnavailable(false)
-    const timer = setTimeout(() => {
-      setChatLoading(false)
-      setChatUnavailable(true)
-    }, 10000)
-
-    return () => clearTimeout(timer)
-  }, [focusedId])
+  useEffect(() => {
+    const check = () => setIsVerySmall(window.innerWidth < 500);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   /* ================= SYNC ORDER ================= */
   useEffect(() => {
@@ -450,24 +848,54 @@ export default function Page() {
 
   /* ================= RENDER ================= */
   return (
-    <div className="app">
+    <div className={`app theme-${theme}`}>
       <header className="header">
-        <div
-          className="header-left"
-          onClick={(e) => e.preventDefault()}
-        >
-          <img
-            src="/FULL-LOGO-NMC.png"
-            alt="Nakama"
-            className="logo"
-            draggable={false}
-          />
-          <h1>Nakama Youtube MultiView</h1>
+        <div className="header-left" onClick={(e) => e.preventDefault()}>
+          <div className="logo-tooltip">
+            <img
+              src="/FULL-LOGO-NMC.png"
+              alt="Nakama"
+              className="logo"
+              draggable={false}
+            />
+            <h1>{isCompactTitle ? "Nakama YTM" : "Nakama Youtube MultiView"}</h1>
+            <span className="tooltip">
+              Created by hxnmi for nakama #NFFN
+            </span>
+          </div>
           <span className="live-count">
-            LIVE: {liveStreams.length} / {streams.length}
+            {isCompactTitle ? (
+              <span>
+                LIVE:<br />
+                {liveStreams.length} / {streams.length}
+              </span>
+
+            ) : (
+              <span>
+                LIVE: {liveStreams.length} / {streams.length}
+              </span>
+            )}
           </span>
+          <button
+            className="ui-btn"
+            onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}
+          >
+            {theme === "dark" ? "🌙 Dark" : "🌞 Light"}
+          </button>
+          {!isVerySmall && (
+            <StreamInputCombo
+              streamInput={streamInput}
+              setStreamInput={setStreamInput}
+              addCustomStream={addCustomStream}
+              dropdownOpen={dropdownOpen}
+              setDropdownOpen={setDropdownOpen}
+              customStreams={customStreams}
+              toggleCustomEnabled={toggleCustomEnabled}
+              removeCustomStream={removeCustomStream}
+            />
+          )}
         </div>
-        <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div className="header-right">
           <button
             className="mobile-menu-button"
             aria-expanded={mobileMenuOpen}
@@ -482,14 +910,6 @@ export default function Page() {
                 <select
                   value={audioMode}
                   onChange={(e) => setAudioMode(e.target.value as any)}
-                  style={{
-                    background: "#262633",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: 6,
-                    padding: "4px 8px",
-                    cursor: "pointer",
-                  }}
                 >
                   <option value="mute">Mute others</option>
                   <option value="reduce">Reduce others</option>
@@ -520,15 +940,21 @@ export default function Page() {
                 title={`Master volume: ${isClient ? masterVolume : 40}%`}
               />
             </div>
-
             <button
               onClick={() => setShowOffline(!showOffline)}
-              className={`toggle-pill ${showOffline ? 'enabled' : 'disabled'}`}
-              style={{ background: showOffline ? '#e11d48' : '#262633', border: 'none', color: '#fff', cursor: 'pointer' }}
+              className={`ui-btn ${showOffline ? 'enabled' : 'disabled'}`}
+              style={{ background: showOffline ? '#e11d48' : 'var(--panel-2)', border: 'none', color: 'var(--text)', cursor: 'pointer' }}
             >
               {showOffline ? "Hide Offline" : "Show Offline"}
             </button>
           </div>
+          <button
+            className="ui-btn"
+            onClick={() => setShowChat(v => !v)}
+            disabled={visibleStreams.length === 0}
+          >
+            💬 Chat
+          </button>
         </div>
       </header>
 
@@ -536,10 +962,27 @@ export default function Page() {
         <div className="mobile-menu" role="dialog" aria-modal="true">
           <div className="mobile-menu-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
             <strong>Menu</strong>
-            <button onClick={() => setMobileMenuOpen(false)} className="icon-button">✕</button>
           </div>
 
           <div className="mobile-menu-content" style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {isVerySmall && (
+              <>
+                <label>
+                  Custom Live Stream
+                </label>
+
+                <StreamInputCombo
+                  streamInput={streamInput}
+                  setStreamInput={setStreamInput}
+                  addCustomStream={addCustomStream}
+                  dropdownOpen={dropdownOpen}
+                  setDropdownOpen={setDropdownOpen}
+                  customStreams={customStreams}
+                  toggleCustomEnabled={toggleCustomEnabled}
+                  removeCustomStream={removeCustomStream}
+                />
+              </>
+            )}
             <div>
               <label style={{ display: 'block', marginBottom: 6 }}>Master volume</label>
               <input
@@ -555,7 +998,7 @@ export default function Page() {
 
             <div>
               <label style={{ display: 'block', marginBottom: 6 }}>Audio behavior</label>
-              <select value={audioMode} onChange={(e) => setAudioMode(e.target.value as any)} style={{ width: '100%', padding: '6px 8px', borderRadius: 6, background: '#262633', color: '#fff', border: 'none' }}>
+              <select value={audioMode} onChange={(e) => setAudioMode(e.target.value as any)}>
                 <option value="mute">Mute others</option>
                 <option value="reduce">Reduce others</option>
               </select>
@@ -576,88 +1019,117 @@ export default function Page() {
               </div>
             )}
 
-            <div className="mobile-menu-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
-              <button onClick={() => { setShowOffline(prev => !prev); setMobileMenuOpen(false); }} className={`toggle-pill ${showOffline ? 'enabled' : 'disabled'}`} style={{ flex: 1 }}>
+            <div className="mobile-menu-actions">
+              <button onClick={() => { setShowOffline(prev => !prev); setMobileMenuOpen(false); }} className={`ui-btn ${showOffline ? 'enabled' : 'disabled'}`} style={{ flex: 1 }}>
                 {showOffline ? "Hide Offline" : "Show Offline"}
-              </button>
-              <button onClick={() => setMobileMenuOpen(false)} style={{ marginLeft: 8, padding: '8px 12px', borderRadius: 8, background: '#262633', color: '#fff', border: 'none' }}>
-                Done
               </button>
             </div>
           </div>
         </div>
       )}
 
-      <div className={`content ${focusedId ? "focus" : ""}`}>
-        <main className={`grid ${focusedId ? "focus" : `grid-${visibleStreams.length}`}`}>
-          {visibleStreams.map(s => {
-            const isFocused = s.channelId === focusedId
-            const reminder = subReminders[s.channelId]
+      <div className="content">
+        <main
+          className="canvas"
+          style={{
+            gridTemplateColumns:
+              layout.mode === "sidechat"
+                ? "minmax(0, 3fr) minmax(0, 1fr)"
+                : `repeat(${layout.cols}, 1fr)`,
+            gridTemplateRows: isMobile
+              ? "auto"
+              : `repeat(${layout.rows}, 1fr)`,
+          }}
+        >
+          {layout.cells.map((cell, i) => {
+            if (cell.type === "video") {
+              const s = visibleStreams.find(v => v.channelId === cell.channelId)
+              if (!s) return <div key={`empty-video-${i}`} />
 
-            return (
-              <div
-                key={s.channelId}
-                className={`card ${isFocused ? "focused" : "unfocused"}`}
-                data-focused={isFocused}
-                onClick={() =>
-                  setFocusedId(prev => (prev === s.channelId ? null : s.channelId))
-                }
-              >
-                <div className="player">
-                  <div id={`player-${s.channelId}`} />
-                </div>
-                <span className={`label status-${s.status}`}>
-                  <span className="dot" />
-                  {s.name}
-                </span>
-                {isFocused && reminder?.show && (
-                  <div className="sub-reminder">
-                    ⭐ Support {s.name}<br />
-                    ⬆️ hover the channel to subscribe!<br />
-                    👍 click the title to like!
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        dismissReminder(s.channelId)
-                      }}
-                    >
-                      ✕
-                    </button>
+              const isFocused = s.channelId === focusedId
+
+              return (
+                <div
+                  key={`video-cell-${cell.channelId}`}
+                  className={`stream-card ${isFocused ? "focused" : ""}`}
+                  onClick={() =>
+                    setFocusedId(prev => (prev === s.channelId ? null : s.channelId))
+                  }
+                >
+                  <div className="video-wrap">
+                    <div
+                      id={`player-${s.channelId}`}
+                      data-channel={s.channelId}
+                    />
                   </div>
-                )}
-                {
-                  s.concurrentViewers !== undefined && (
-                    <span className="viewer-count">
-                      👁 {s.concurrentViewers.toLocaleString()}
-                    </span>
-                  )
-                }
-              </div>
-            )
+
+                  <button
+                    className={`stream-label ${isFocused ? "active" : ""}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setFocusedId(prev => (prev === s.channelId ? null : s.channelId))
+                    }}
+                  >
+                    <span className={`dot ${s.status}`} />
+                    {s.name}
+                  </button>
+
+                  {
+                    isFocused && subReminders[s.channelId]?.show && (
+                      <div className="sub-reminder">
+                        ⭐ Support {s.name}<br />
+                        ⬆️ Subscribe & 👍 Like<br />
+                        By opening the source video!
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            dismissReminder(s.channelId)
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )
+                  }
+
+                  {
+                    s.concurrentViewers !== undefined && (
+                      <span className="viewer-count">
+                        👁 {s.concurrentViewers.toLocaleString()}
+                      </span>
+                    )
+                  }
+                </div>
+              )
+            }
+            if (cell.type === "chat") {
+              const s = visibleStreams.find(v => v.channelId === cell.channelId)
+              if (!s) return <div key={`empty-chat-${i}`} />
+              const chatSrc = `https://www.youtube.com/live_chat?v=${s.liveVideoId}&embed_domain=${host}&dark_theme=${theme === "dark" ? 1 : 0}`
+              return (
+                <div
+                  key={`chat-${cell.channelId}`}
+                  className={`chat-card ${isMobile ? "mobile-chat" : ""}`}
+                  style={
+                    isMobile && layout.mode === "mobile-longchat"
+                      ? { gridRow: "span 2" }
+                      : undefined
+                  }
+                >
+                  <iframe
+                    src={chatSrc}
+                    allow="autoplay"
+                    title={`chat-${s.channelId}`}
+                  />
+                </div>
+              )
+            }
+
+            return null
           })}
+
         </main>
-
-        {focusedId && (
-          <aside className="chat-panel">
-            <iframe
-              src={`https://www.youtube.com/live_chat?v=${visibleStreams.find(s => s.channelId === focusedId)?.liveVideoId
-                }&embed_domain=${host}`} onLoad={() => { setChatLoading(false) }}
-              allow="autoplay"
-            />
-            {chatLoading && (
-              <div className="chat-overlay">
-                💬 Loading chat…
-              </div>
-            )}
-
-            {!chatLoading && chatUnavailable && (
-              <div className="chat-overlay">
-                ⛔ Chat Unavailable
-              </div>
-            )}
-          </aside>
-        )}
-      </div>
+      </div >
 
       <div className="notify-stack">
         {notifications.map(n => (
@@ -673,11 +1145,14 @@ export default function Page() {
             <span className="group-label">{g.name}</span>
             <div className="group-streams">
               {g.streams.map(s => (
-                <span key={s.channelId} className={`toggle-pill ${s.status} ${s.enabled ? "enabled" : "disabled"}`}
+                <span
+                  key={s.channelId}
+                  className={`toggle-pill ${s.status} ${s.enabled ? "enabled" : "disabled"}`}
                   onClick={() => {
                     if (s.status === "offline") return
                     setStreams(prev => prev.map(p => p.channelId === s.channelId ? { ...p, enabled: !p.enabled } : p))
-                  }}>
+                  }}
+                >
                   <span className="dot" />{s.name}
                 </span>
               ))}

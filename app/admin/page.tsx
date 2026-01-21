@@ -27,6 +27,8 @@ export default function AdminPage() {
     const [sort, setSort] = useState<"order" | "az" | "za" | "group">("order")
     const [dragging, setDragging] = useState<string | null>(null)
 
+    const [isSmall, setIsVerySmall] = useState(false);
+
     /* ================= LOAD CONFIG ================= */
     useEffect(() => {
         if (!token) return
@@ -189,6 +191,13 @@ export default function AdminPage() {
         setDragging(null)
     }
 
+    useEffect(() => {
+        const check = () => setIsVerySmall(window.innerWidth < 450);
+        check();
+        window.addEventListener("resize", check);
+        return () => window.removeEventListener("resize", check);
+    }, []);
+
     /* ================= TOKEN GATE ================= */
     if (!token) {
         return (
@@ -215,7 +224,10 @@ export default function AdminPage() {
         <div className="admin">
             <h1>Admin – Streamers</h1>
 
-            <div className="admin-add">
+            <div className="admin-add" style={{
+                flexWrap: isSmall ? "wrap" : "nowrap",
+            }}
+            >
                 <input
                     placeholder="YouTube Channel ID"
                     value={channelId}
@@ -239,7 +251,10 @@ export default function AdminPage() {
                 <button onClick={add}>Add</button>
             </div>
 
-            <div className="admin-toolbar">
+            <div className="admin-toolbar" style={{
+                flexWrap: isSmall ? "wrap" : "nowrap",
+            }}
+            >
                 <input
                     placeholder="Search name or channel ID…"
                     value={search}
@@ -268,7 +283,12 @@ export default function AdminPage() {
                         onDragOver={e => sort === "order" && e.preventDefault()}
                         onDrop={() => onDrop(s.channelId)}
                     >
-                        <div className="admin-main">
+                        <div
+                            className="admin-main"
+                            style={{
+                                flexWrap: isSmall ? "wrap" : "nowrap",
+                            }}
+                        >
                             <input
                                 value={s.name}
                                 onChange={e =>

@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Nakama Youtube Multiview",
-  description: "Created by hxnmi",
+  viewport: "width=device-width, initial-scale=1",
+  title: "Nakama Youtube Multiview"
 };
 
 export default function RootLayout({
