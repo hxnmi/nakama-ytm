@@ -78,6 +78,7 @@ export default function Page() {
   const [showChat, setShowChat] = useState<boolean>(false)
 
   const [theme, setTheme] = useState<"dark" | "light">("dark")
+  const [theater, setTheater] = useState(false)
   const [mounted, setMounted] = useState(false)
 
   const liveCount = streams.filter(s => s.status === "live").length
@@ -126,7 +127,7 @@ export default function Page() {
           mode: "mobile-longchat",
           cells: [
             { type: "video", channelId: activeId },
-            { type: "chat", channelId: activeId, rowSpan: 1 },
+            { type: "chat", channelId: activeId, rowSpan: 2 },
           ],
         }
       }
@@ -217,9 +218,6 @@ export default function Page() {
         })),
       }
     }
-    if (videoCount === 0) {
-      return { cols: 0, rows: 0, mode: "grid" as "grid", cells: [] }
-    }
     if (videoCount === 1) {
       return {
         cols: 2,
@@ -231,52 +229,68 @@ export default function Page() {
         ],
       }
     }
-    if (videoCount === 2) {
-      return {
-        cols: 2,
-        rows: 2,
-        mode: "sidechat" as "sidechat",
-        cells: [
-          { type: "video" as const, channelId: visibleStreams[0].channelId },
-          { type: "chat" as const, channelId: visibleStreams[0].channelId },
-          { type: "video" as const, channelId: visibleStreams[1].channelId },
-          { type: "chat" as const, channelId: visibleStreams[1].channelId },
-        ],
+    if (theater) {
+      if (videoCount === 2) {
+        return {
+          cols: 2,
+          rows: 2,
+          mode: "theater" as "theater",
+          cells: [
+            { type: "video" as const, channelId: visibleStreams[0].channelId },
+            { type: "chat" as const, channelId: visibleStreams[0].channelId },
+            { type: "video" as const, channelId: visibleStreams[1].channelId },
+          ],
+        }
       }
     }
-    if (videoCount === 3) {
-      const ids = visibleStreams.map(s => s.channelId)
-      const cells: { type: "video" | "chat", channelId: string }[] = []
-      for (let i = 0; i < 3; i++) {
-        cells.push({ type: i % 2 === 0 ? "video" : "chat", channelId: ids[i] })
+    else {
+      if (videoCount === 2) {
+        return {
+          cols: 2,
+          rows: 2,
+          mode: "sidechat" as "sidechat",
+          cells: [
+            { type: "video" as const, channelId: visibleStreams[0].channelId },
+            { type: "chat" as const, channelId: visibleStreams[0].channelId },
+            { type: "video" as const, channelId: visibleStreams[1].channelId },
+            { type: "chat" as const, channelId: visibleStreams[1].channelId },
+          ],
+        }
       }
-      for (let i = 0; i < 3; i++) {
-        cells.push({ type: i % 2 === 0 ? "chat" : "video", channelId: ids[i] })
+      if (videoCount === 3) {
+        const ids = visibleStreams.map(s => s.channelId)
+        const cells: { type: "video" | "chat", channelId: string }[] = []
+        for (let i = 0; i < 3; i++) {
+          cells.push({ type: i % 2 === 0 ? "video" : "chat", channelId: ids[i] })
+        }
+        for (let i = 0; i < 3; i++) {
+          cells.push({ type: i % 2 === 0 ? "chat" : "video", channelId: ids[i] })
+        }
+        return {
+          cols: 3,
+          rows: 2,
+          mode: "grid" as "grid",
+          cells,
+        }
       }
-      return {
-        cols: 3,
-        rows: 2,
-        mode: "grid" as "grid",
-        cells,
-      }
-    }
-    if (videoCount === 4) {
-      const ids = visibleStreams.map(s => s.channelId)
-      return {
-        cols: 4,
-        rows: 2,
-        mode: "grid" as "grid",
-        cells: [
-          { type: "video" as const, channelId: ids[0] },
-          { type: "chat" as const, channelId: ids[0] },
-          { type: "chat" as const, channelId: ids[1] },
-          { type: "video" as const, channelId: ids[1] },
+      if (videoCount === 4) {
+        const ids = visibleStreams.map(s => s.channelId)
+        return {
+          cols: 4,
+          rows: 2,
+          mode: "grid" as "grid",
+          cells: [
+            { type: "video" as const, channelId: ids[0] },
+            { type: "chat" as const, channelId: ids[0] },
+            { type: "chat" as const, channelId: ids[1] },
+            { type: "video" as const, channelId: ids[1] },
 
-          { type: "video" as const, channelId: ids[2] },
-          { type: "chat" as const, channelId: ids[2] },
-          { type: "chat" as const, channelId: ids[3] },
-          { type: "video" as const, channelId: ids[3] },
-        ],
+            { type: "video" as const, channelId: ids[2] },
+            { type: "chat" as const, channelId: ids[2] },
+            { type: "chat" as const, channelId: ids[3] },
+            { type: "video" as const, channelId: ids[3] },
+          ],
+        }
       }
     }
     return {
@@ -420,6 +434,17 @@ export default function Page() {
     return () => clearInterval(t)
   }, [isClient])
 
+  async function fetchYouTubeMeta(videoId: string) {
+    try {
+      const res = await fetch(
+        `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`
+      )
+      if (!res.ok) throw new Error("oEmbed failed")
+      return await res.json()
+    } catch {
+      return null
+    }
+  }
   /* ================= PLAYERS ================= */
   useEffect(() => {
     if (!ytReady) return
@@ -707,18 +732,29 @@ export default function Page() {
     })
   }, [customStreams])
 
-  function addCustomStream() {
+  async function addCustomStream() {
     const videoId = extractYouTubeVideoId(streamInput)
     if (!videoId) {
       alert("Invalid YouTube link")
       return
     }
 
-    const channelId = `custom-${videoId}`
+    const meta = await fetchYouTubeMeta(videoId)
 
     setCustomStreams(prev => {
-      if (prev.some(s => s.channelId === channelId)) return prev
-      return [...prev, createCustomStreamer(videoId)]
+      if (prev.some(s => s.channelId === `custom-${videoId}`)) return prev
+
+      return [
+        ...prev,
+        {
+          name: meta?.author_name ?? "Custom Stream",
+          channelId: `custom-${videoId}`,
+          status: "live",
+          liveVideoId: videoId,
+          enabled: true,
+          groups: ["Custom"],
+        },
+      ]
     })
 
     setStreamInput("")
@@ -929,6 +965,12 @@ export default function Page() {
             ☰
           </button>
           <div className="desktop-controls">
+            {/* <button
+              className="ui-btn" style={{ display: "flex", alignItems: "center", gap: 8 }}
+              onClick={() => setTheater(t => t === true ? false : true)}
+            >
+              {theater === true ? "Theater Mode" : "Default Mode"}
+            </button> */}
             {focusedId && (
               <div className="audio-focus-controls" style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <select
@@ -967,7 +1009,7 @@ export default function Page() {
             <button
               onClick={() => setShowOffline(!showOffline)}
               className={`ui-btn ${showOffline ? 'enabled' : 'disabled'}`}
-              style={{ background: showOffline ? '#e11d48' : 'var(--panel-2)', color: 'var(--text)', cursor: 'pointer' }}
+              style={{ background: showOffline ? '#e11d48' : 'var(--panel-2)', border: 'none', color: 'var(--text)', cursor: 'pointer' }}
             >
               {showOffline ? "Hide Offline" : "Show Offline"}
             </button>
@@ -1136,7 +1178,7 @@ export default function Page() {
                   className={`chat-card ${isMobile ? "mobile-chat" : ""}`}
                   style={
                     isMobile && layout.mode === "mobile-longchat"
-                      ? { gridRow: "span 2" }
+                      ? { gridRow: `span ${cell.rowSpan}` }
                       : undefined
                   }
                 >
