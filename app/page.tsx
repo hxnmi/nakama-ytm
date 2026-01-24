@@ -38,7 +38,26 @@ const STORAGE = {
   lastStatus: "lastStreamStatus",
   subReminder: "subReminderState",
   showChat: "showChat",
-  customStreams: "customStreams"
+  customStreams: "customStreams",
+  theater: "theaterMode",
+  theme: "theme",
+}
+
+const STATUS_PRIORITY: Record<StreamStatus, number> = {
+  live: 0,
+  waiting: 1,
+  scheduled: 2,
+  offline: 3,
+}
+
+const PlayerHost = ({ channelId }: { channelId: string }) => {
+  return (
+    <div
+      id={`player-${channelId}`}
+      data-channel={channelId}
+      style={{ width: "100%", height: "100%" }}
+    />
+  )
 }
 
 export default function Page() {
@@ -95,19 +114,14 @@ export default function Page() {
 
   /* ================= COMPUTED ================= */
   const visibleStreams = useMemo(() => {
-    const getIndex = (id: string) => {
-      const i = order.indexOf(id)
-      return i === -1 ? Number.MAX_SAFE_INTEGER : i
-    }
+    const filtered = streams.filter(
+      s => s.enabled && s.liveVideoId && s.status !== "offline"
+    )
 
-    return streams
-      .filter(s =>
-        s.enabled &&
-        s.liveVideoId &&
-        s.status !== "offline"
-      )
-      .sort((a, b) => getIndex(a.channelId) - getIndex(b.channelId))
-  }, [streams, order])
+    return filtered.sort((a, b) => {
+      return (STATUS_PRIORITY[a.status] ?? 4) - (STATUS_PRIORITY[b.status] ?? 4)
+    })
+  }, [streams])
 
   const streamMap = useMemo(
     () => new Map(visibleStreams.map(s => [s.channelId, s])),
@@ -205,19 +219,6 @@ export default function Page() {
         }
       }
     }
-    if (!showChat || videoCount >= 5) {
-      const cols = Math.ceil(Math.sqrt(videoCount))
-      const rows = Math.ceil(videoCount / cols)
-      return {
-        cols,
-        rows,
-        mode: "grid" as "grid",
-        cells: Array.from({ length: videoCount }, (_, i) => ({
-          type: "video" as const,
-          channelId: visibleStreams[i]?.channelId,
-        })),
-      }
-    }
     if (videoCount === 1) {
       return {
         cols: 2,
@@ -230,47 +231,103 @@ export default function Page() {
       }
     }
     if (theater) {
-      if (videoCount === 2) {
-        return {
-          cols: 2,
-          rows: 2,
-          mode: "theater" as "theater",
-          cells: [
-            { type: "video" as const, channelId: visibleStreams[0].channelId },
-            { type: "chat" as const, channelId: visibleStreams[0].channelId },
-            { type: "video" as const, channelId: visibleStreams[1].channelId },
-          ],
-        }
+      if (videoCount > 5) {
+        const ids = visibleStreams.map(s => s.channelId)
+        const mainId = (focusedId && ids.includes(focusedId))
+          ? focusedId
+          : ids[0]
+
+        const thumbs = ids.filter(id => id !== mainId)
+
+        const cells = [
+          { type: "video", channelId: mainId, colStart: 1, rowStart: 1, colSpan: 3, rowSpan: 3 },
+          { type: "chat", channelId: mainId, colStart: 5, rowStart: 1, rowSpan: 5 },
+        ]
+
+        thumbs.forEach((id, j) => {
+          const cell: any = { type: "video", channelId: id }
+          if (j < 4) {
+            cell.colStart = undefined
+            cell.rowStart = 4
+          } else if (j < 7) {
+            cell.colStart = 4
+            cell.rowStart = j - 3
+          } else {
+            cell.colStart = undefined
+            cell.rowStart = 5
+          }
+          cells.push(cell)
+        })
+
+        return { cols: 5, rows: 5, mode: "theater", cells }
+      }
+
+      if (videoCount > 1) {
+        const ids = visibleStreams.map(s => s.channelId)
+        const mainId = (focusedId && ids.includes(focusedId))
+          ? focusedId
+          : ids[0]
+
+        const thumbs = ids.filter(id => id !== mainId)
+
+        const cells = [
+          { type: "video", channelId: mainId, colStart: 1, rowStart: 1, colSpan: 4, rowSpan: 4 },
+          { type: "chat", channelId: mainId, colStart: 5, rowStart: 1, rowSpan: 5 },
+          ...thumbs.map((id, i) => ({
+            type: "video",
+            channelId: id,
+            colStart: (i % 4) + 1,
+            rowStart: 5
+          })),
+        ]
+
+        return { cols: 5, rows: 5, mode: "theater", cells }
       }
     }
     else {
+      if (!showChat || videoCount >= 5) {
+        const cols = Math.ceil(Math.sqrt(videoCount))
+        const rows = Math.ceil(videoCount / cols)
+        return {
+          cols,
+          rows,
+          mode: "grid" as "grid",
+          cells: Array.from({ length: videoCount }, (_, i) => ({
+            type: "video" as const,
+            channelId: visibleStreams[i]?.channelId,
+            colStart: (i % cols) + 1,
+            rowStart: Math.floor(i / cols) + 1,
+          })),
+        }
+      }
       if (videoCount === 2) {
+        const ids = visibleStreams.map(s => s.channelId)
         return {
           cols: 2,
           rows: 2,
-          mode: "sidechat" as "sidechat",
+          mode: "2-sidechat" as "2-sidechat",
           cells: [
-            { type: "video" as const, channelId: visibleStreams[0].channelId },
-            { type: "chat" as const, channelId: visibleStreams[0].channelId },
-            { type: "video" as const, channelId: visibleStreams[1].channelId },
-            { type: "chat" as const, channelId: visibleStreams[1].channelId },
+            { type: "video" as const, channelId: ids[0], colStart: 1, rowStart: 1 },
+            { type: "chat-column" as const, channelIds: [ids[0], ids[1]], colStart: 2, rowStart: 1, rowSpan: 2 },
+            { type: "video" as const, channelId: ids[1], colStart: 1, rowStart: 2 },
           ],
         }
       }
       if (videoCount === 3) {
         const ids = visibleStreams.map(s => s.channelId)
-        const cells: { type: "video" | "chat", channelId: string }[] = []
-        for (let i = 0; i < 3; i++) {
-          cells.push({ type: i % 2 === 0 ? "video" : "chat", channelId: ids[i] })
-        }
-        for (let i = 0; i < 3; i++) {
-          cells.push({ type: i % 2 === 0 ? "chat" : "video", channelId: ids[i] })
-        }
         return {
           cols: 3,
           rows: 2,
-          mode: "grid" as "grid",
-          cells,
+          mode: "3-grid" as "3-grid",
+          cells: [
+            { type: "video" as const, channelId: ids[0], rowStart: 1, colStart: 1 },
+            { type: "video" as const, channelId: ids[1], rowStart: 2, colStart: 2 },
+            { type: "video" as const, channelId: ids[2], rowStart: 1, colStart: 3 },
+
+            { type: "chat" as const, channelId: ids[0], rowStart: 2, colStart: 1 },
+            { type: "chat" as const, channelId: ids[1], rowStart: 1, colStart: 2 },
+            { type: "chat" as const, channelId: ids[2], rowStart: 2, colStart: 3 }
+          ],
         }
       }
       if (videoCount === 4) {
@@ -278,17 +335,17 @@ export default function Page() {
         return {
           cols: 4,
           rows: 2,
-          mode: "grid" as "grid",
+          mode: "4-grid" as "4-grid",
           cells: [
-            { type: "video" as const, channelId: ids[0] },
-            { type: "chat" as const, channelId: ids[0] },
-            { type: "chat" as const, channelId: ids[1] },
-            { type: "video" as const, channelId: ids[1] },
+            { type: "video" as const, channelId: ids[0], colStart: 1, rowStart: 1 },
+            { type: "chat" as const, channelId: ids[0], colStart: 2, rowStart: 1 },
+            { type: "video" as const, channelId: ids[1], colStart: 4, rowStart: 1 },
+            { type: "chat" as const, channelId: ids[1], colStart: 3, rowStart: 1 },
+            { type: "video" as const, channelId: ids[2], colStart: 1, rowStart: 2 },
+            { type: "chat" as const, channelId: ids[2], colStart: 2, rowStart: 2 },
+            { type: "video" as const, channelId: ids[3], colStart: 4, rowStart: 2 },
+            { type: "chat" as const, channelId: ids[3], colStart: 3, rowStart: 2 },
 
-            { type: "video" as const, channelId: ids[2] },
-            { type: "chat" as const, channelId: ids[2] },
-            { type: "chat" as const, channelId: ids[3] },
-            { type: "video" as const, channelId: ids[3] },
           ],
         }
       }
@@ -300,9 +357,57 @@ export default function Page() {
       cells: Array.from({ length: videoCount }, (_, i) => ({
         type: "video" as const,
         channelId: visibleStreams[i]?.channelId,
+        colStart: (i % videoCount) + 1,
+        rowStart: 1,
       })),
     }
-  }, [visibleStreams, showChat, isMobile, focusedId])
+  }, [visibleStreams, showChat, isMobile, focusedId, theater])
+
+  const gridTemplateColumns = useMemo(() => {
+    if (layout.mode === "sidechat") return "minmax(0, 3fr) minmax(0, 1fr)";
+    if (isCompactTitle && layout.mode === "2-sidechat") return "minmax(0, 1fr) minmax(0, 1fr)";
+    if (layout.mode === "2-sidechat") return "minmax(0, 1.5fr) minmax(0, 1fr)";
+    if (layout.mode === "theater") return "minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.36fr)";
+    return `repeat(${layout.cols}, 1fr)`;
+  }, [layout.mode, layout.cols]);
+
+  const gridTemplateRows = useMemo(
+    () => (isMobile ? "auto" : `repeat(${layout.rows}, 1fr)`),
+    [isMobile, layout.rows]
+  );
+
+  const positions = useMemo(() => {
+    const m = new Map<string, any>()
+    layout.cells.forEach((c: any) => {
+      if (c.type === "video") {
+        m.set(`video-${c.channelId}`, {
+          colStart: c.colStart,
+          rowStart: c.rowStart,
+          colSpan: c.colSpan,
+          rowSpan: c.rowSpan,
+        })
+      }
+      else if (c.type === "chat") {
+        m.set(`chat-${c.channelId}`, {
+          colStart: c.colStart,
+          rowStart: c.rowStart,
+          colSpan: c.colSpan,
+          rowSpan: c.rowSpan,
+        })
+      }
+      else if (c.type === "chat-column") {
+        m.set(`chat-column-${c.channelIds[0]}`, {
+          colStart: c.colStart,
+          rowStart: c.rowStart,
+          colSpan: c.colSpan,
+          rowSpan: c.rowSpan,
+        })
+      }
+    })
+    return m
+  }, [layout])
+
+
 
   /* ================= INITIAL LOAD ================= */
   useEffect(() => {
@@ -314,7 +419,10 @@ export default function Page() {
       if (savedChat !== null) {
         setShowChat(savedChat === "true")
       }
-
+      const savedTheater = localStorage.getItem(STORAGE.theater)
+      if (savedTheater !== null) {
+        setTheater(savedTheater === "true")
+      }
       const savedAudio = localStorage.getItem(STORAGE.audio)
       if (savedAudio) {
         const p = JSON.parse(savedAudio)
@@ -344,9 +452,24 @@ export default function Page() {
     }
   }, [])
 
+  /* ================= HELPERS ================= */
+  const buildChatUrl = (videoId: string) => {
+    return `https://www.youtube.com/live_chat?v=${videoId}&embed_domain=${host}&dark_theme=${theme === "dark" ? 1 : 0}`
+  }
+
+  const getGridStyle = (pos: any) => {
+    if (!pos) return {}
+    return {
+      ...(pos.colStart ? { gridColumnStart: `${pos.colStart}` } : {}),
+      ...(pos.colSpan ? { gridColumnEnd: `span ${pos.colSpan}` } : {}),
+      ...(pos.rowStart ? { gridRowStart: `${pos.rowStart}` } : {}),
+      ...(pos.rowSpan ? { gridRowEnd: `span ${pos.rowSpan}` } : {}),
+    }
+  }
+
   useEffect(() => {
     setMounted(true)
-    const saved = localStorage.getItem("theme")
+    const saved = localStorage.getItem(STORAGE.theme)
     if (saved === "light" || saved === "dark") {
       setTheme(saved)
     }
@@ -370,11 +493,16 @@ export default function Page() {
 
   useEffect(() => {
     if (!mounted) return
-    localStorage.setItem("theme", theme)
+    localStorage.setItem(STORAGE.theme, theme)
   }, [theme, mounted])
 
   useEffect(() => {
-    const saved = localStorage.getItem("customStreams")
+    if (!isClient) return
+    localStorage.setItem(STORAGE.theater, String(theater))
+  }, [theater, isClient])
+
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE.customStreams)
     if (saved) {
       setCustomStreams(JSON.parse(saved))
     }
@@ -382,7 +510,7 @@ export default function Page() {
 
   useEffect(() => {
     localStorage.setItem(
-      "customStreams",
+      STORAGE.customStreams,
       JSON.stringify(customStreams)
     )
   }, [customStreams])
@@ -515,17 +643,6 @@ export default function Page() {
     }
   }
 
-  function createCustomStreamer(videoId: string): Streamer {
-    return {
-      name: `Custom Stream`,
-      channelId: `custom-${videoId}`,
-      status: "live",
-      liveVideoId: videoId,
-      enabled: true,
-      groups: ["Custom"],
-    }
-  }
-
   useEffect(() => {
     const activeIds = new Set(
       streams.filter(s => s.liveVideoId).map(s => s.channelId)
@@ -561,18 +678,11 @@ export default function Page() {
     })
   }, [focusedId, audioMode, unfocusedVolume, masterVolume])
 
-
   function safeApplyAudio(
     player: any,
     volume: number,
     mute: boolean
   ) {
-    try {
-      if (!mute && volume > 0) {
-        player.playVideo?.()
-      }
-    } catch { }
-
     requestAnimationFrame(() => {
       try {
         if (mute || volume === 0) {
@@ -595,12 +705,6 @@ export default function Page() {
 
   const footerGroups = useMemo(() => {
     const map = new Map<string, Streamer[]>()
-    const STATUS_PRIORITY: Record<StreamStatus, number> = {
-      live: 0,
-      waiting: 1,
-      scheduled: 2,
-      offline: 3,
-    }
 
     streams.forEach(s => {
       s.groups?.forEach(g => {
@@ -736,13 +840,16 @@ export default function Page() {
     const videoId = extractYouTubeVideoId(streamInput)
     if (!videoId) {
       alert("Invalid YouTube link")
+      setStreamInput("")
       return
     }
 
     const meta = await fetchYouTubeMeta(videoId)
 
     setCustomStreams(prev => {
-      if (prev.some(s => s.channelId === `custom-${videoId}`)) return prev
+      if (prev.some(s => s.channelId === `custom-${videoId}`)) {
+        return prev
+      }
 
       return [
         ...prev,
@@ -761,31 +868,19 @@ export default function Page() {
   }
 
   function toggleCustomEnabled(id: string) {
-    setStreams(prev =>
-      prev.map(p =>
-        p.channelId === id
-          ? { ...p, enabled: !p.enabled }
-          : p
+    const updateStreams = (streams: Streamer[]) =>
+      streams.map(p =>
+        p.channelId === id ? { ...p, enabled: !p.enabled } : p
       )
-    )
-
-    setCustomStreams(prev =>
-      prev.map(p =>
-        p.channelId === id
-          ? { ...p, enabled: !p.enabled }
-          : p
-      )
-    )
+    setStreams(updateStreams)
+    setCustomStreams(updateStreams)
   }
 
   function removeCustomStream(id: string) {
-    setCustomStreams(prev =>
-      prev.filter(s => s.channelId !== id)
-    )
-
-    setStreams(prev =>
-      prev.filter(s => s.channelId !== id)
-    )
+    const filterStreams = (streams: Streamer[]) =>
+      streams.filter(s => s.channelId !== id)
+    setCustomStreams(filterStreams)
+    setStreams(filterStreams)
 
     if (players.current[id]) {
       players.current[id].destroy()
@@ -811,15 +906,27 @@ export default function Page() {
       <div className="stream-input-combo" style={{ position: "relative" }}>
         <div className="select-like">
           <input
+            id="custom-stream-input"
+            name="customStreamUrl"
+            type="text"
             placeholder="Paste Custom Live link..."
             value={streamInput}
             onChange={e => setStreamInput(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && addCustomStream()}
+            onKeyDown={e => {
+              if (e.key === "Enter") {
+                e.preventDefault()
+                addCustomStream()
+              }
+            }}
           />
-
           <button
             className="dropdown-toggle"
-            onClick={() => setDropdownOpen((v: boolean) => !v)}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setDropdownOpen((v: boolean) => !v)
+            }}
+            onMouseDown={(e) => e.preventDefault()}
             aria-label="Toggle dropdown"
           />
         </div>
@@ -872,24 +979,6 @@ export default function Page() {
     return () => window.removeEventListener("resize", update)
   }, [])
 
-  /* ================= SYNC ORDER ================= */
-  useEffect(() => {
-    const liveIds = visibleStreams.map(s => s.channelId)
-    if (liveIds.length === 0) return
-
-    setOrder(prev => {
-      const kept = prev.filter(id => liveIds.includes(id))
-      const added = liveIds.filter(id => !kept.includes(id))
-      const nextOrder = [...kept, ...added]
-
-      if (
-        prev.length === nextOrder.length &&
-        prev.every((v, i) => v === nextOrder[i])
-      ) return prev
-      return nextOrder
-    })
-  }, [visibleStreams])
-
   /* ================= LOAD CACHE ================= */
   useEffect(() => {
     if (!focusedId) return
@@ -903,10 +992,10 @@ export default function Page() {
     )
   }, [focusedId])
 
+  /* ================= RENDER ================= */
   if (!mounted) {
     return <div className="app theme-dark" />
   }
-  /* ================= RENDER ================= */
   return (
     <div className={`app theme-${theme}`}>
       <header className="header">
@@ -965,12 +1054,14 @@ export default function Page() {
             ☰
           </button>
           <div className="desktop-controls">
-            {/* <button
+            <button
               className="ui-btn" style={{ display: "flex", alignItems: "center", gap: 8 }}
-              onClick={() => setTheater(t => t === true ? false : true)}
+              onClick={() => {
+                setTheater(prev => !prev)
+              }}
             >
               {theater === true ? "Theater Mode" : "Default Mode"}
-            </button> */}
+            </button>
             {focusedId && (
               <div className="audio-focus-controls" style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <select
@@ -1097,103 +1188,146 @@ export default function Page() {
       <div className="content">
         <main
           className="canvas"
-          style={{
-            gridTemplateColumns:
-              layout.mode === "sidechat"
-                ? "minmax(0, 3fr) minmax(0, 1fr)"
-                : `repeat(${layout.cols}, 1fr)`,
-            gridTemplateRows: isMobile
-              ? "auto"
-              : `repeat(${layout.rows}, 1fr)`,
-          }}
+          style={{ gridTemplateColumns, gridTemplateRows }}
         >
-          {layout.cells.map((cell, i) => {
-            if (cell.type === "video") {
-              const s = streamMap.get(cell.channelId)
-              if (!s) return <div key={`empty-video-${i}`} />
+          {visibleStreams.map(s => {
+            const cell = positions.get(`video-${s.channelId}`)
+            const isFocused = s.channelId === focusedId
+            return (
+              <div
+                key={s.channelId}
+                className={`stream-card ${isFocused ? "focused" : ""}`}
+                style={layout.mode === "theater" && cell ? getGridStyle(cell) : getGridStyle(cell)}
+              >
+                <div className="video-wrap">
+                  <PlayerHost channelId={s.channelId} />
+                </div>
+                <button
+                  className={`stream-label ${isFocused ? "active" : ""}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setFocusedId(prev => {
+                      const next = prev === s.channelId ? null : s.channelId
+                      requestAnimationFrame(() => {
+                        Object.entries(players.current).forEach(([id, player]) => {
+                          if (!player) return
 
-              const isFocused = s.channelId === focusedId
+                          const isMain = next === null || id === next
+                          const vol = isMain
+                            ? audioValues.current.masterVolume
+                            : audioValues.current.audioMode === "mute"
+                              ? 0
+                              : Math.round(
+                                audioValues.current.masterVolume *
+                                audioValues.current.unfocusedVolume / 100
+                              )
 
-              return (
-                <div
-                  key={`video-cell-${cell.channelId}`}
-                  className={`stream-card ${isFocused ? "focused" : ""}`}
-                  onClick={() =>
-                    setFocusedId(prev => (prev === s.channelId ? null : s.channelId))
-                  }
+                          if (vol === 0) {
+                            player.mute?.()
+                          } else {
+                            player.unMute?.()
+                            player.setVolume?.(vol)
+                          }
+                        })
+                      })
+                      return next
+                    })
+
+                  }}
                 >
-                  <div className="video-wrap">
-                    <div
-                      id={`player-${s.channelId}`}
-                      data-channel={s.channelId}
+                  <span className={`dot ${s.status}`} />
+                  {s.name}
+                </button>
+
+                {
+                  isFocused && subReminders[s.channelId]?.show && (
+                    <div className="sub-reminder">
+                      ⭐ Support {s.name}<br />
+                      ⬆️ Subscribe & 👍 Like<br />
+                      By opening the source video!
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          dismissReminder(s.channelId)
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )
+                }
+
+                {
+                  s.concurrentViewers !== undefined && (
+                    <span className="viewer-count">
+                      👁 {s.concurrentViewers.toLocaleString()}
+                    </span>
+                  )
+                }
+              </div>
+            )
+          })}
+          {
+            layout.cells.map((cell, i) => {
+              if (cell.type === "chat") {
+                const s = streamMap.get(cell.channelId)
+                if (!s) return <div key={`empty-chat-${i}`} />
+                const pos = positions.get(`chat-${cell.channelId}`)
+                return (
+                  <div
+                    key={`chat-${cell.channelId}`}
+                    className={`chat-card ${isMobile ? "mobile-chat" : ""}`}
+                    style={getGridStyle(pos)}
+                  >
+                    <iframe
+                      src={buildChatUrl(s.liveVideoId!)}
+                      allow="autoplay"
+                      title={`chat-${s.channelId}`}
                     />
                   </div>
+                )
+              }
+              if (cell.type === "chat-column") {
+                const [idA, idB] = (cell as any).channelIds
+                const sA = streamMap.get(idA)
+                const sB = streamMap.get(idB)
+                const pos = positions.get(`chat-column-${idA}`)
 
-                  <button
-                    className={`stream-label ${isFocused ? "active" : ""}`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setFocusedId(prev => (prev === s.channelId ? null : s.channelId))
-                    }}
+                return (
+                  <div
+                    key={`chat-column-${i}`}
+                    className="chat-column"
+                    style={getGridStyle(pos)}
                   >
-                    <span className={`dot ${s.status}`} />
-                    {s.name}
-                  </button>
+                    <div className="chat-card" aria-hidden={!sA}>
+                      {sA ? (
+                        <iframe
+                          src={buildChatUrl(sA.liveVideoId!)}
+                          title={`chat-${sA.channelId}`}
+                          allow="autoplay"
+                        />
+                      ) : null}
+                    </div>
 
-                  {
-                    isFocused && subReminders[s.channelId]?.show && (
-                      <div className="sub-reminder">
-                        ⭐ Support {s.name}<br />
-                        ⬆️ Subscribe & 👍 Like<br />
-                        By opening the source video!
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            dismissReminder(s.channelId)
-                          }}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    )
-                  }
+                    <div className="chat-card" aria-hidden={!sB}>
+                      {sB ? (
+                        <iframe
+                          src={buildChatUrl(sB.liveVideoId!)}
+                          title={`chat-${sB.channelId}`}
+                          allow="autoplay"
+                        />
+                      ) : null}
+                    </div>
+                  </div>
+                )
+              }
+              if (cell.type === "empty") {
+                return <div key={`empty-${i}`} />
+              }
 
-                  {
-                    s.concurrentViewers !== undefined && (
-                      <span className="viewer-count">
-                        👁 {s.concurrentViewers.toLocaleString()}
-                      </span>
-                    )
-                  }
-                </div>
-              )
-            }
-            if (cell.type === "chat") {
-              const s = streamMap.get(cell.channelId)
-              if (!s) return <div key={`empty-chat-${i}`} />
-              const chatSrc = `https://www.youtube.com/live_chat?v=${s.liveVideoId}&embed_domain=${host}&dark_theme=${theme === "dark" ? 1 : 0}`
-              return (
-                <div
-                  key={`chat-${cell.channelId}`}
-                  className={`chat-card ${isMobile ? "mobile-chat" : ""}`}
-                  style={
-                    isMobile && layout.mode === "mobile-longchat"
-                      ? { gridRow: `span ${cell.rowSpan}` }
-                      : undefined
-                  }
-                >
-                  <iframe
-                    src={chatSrc}
-                    allow="autoplay"
-                    title={`chat-${s.channelId}`}
-                  />
-                </div>
-              )
-            }
-
-            return null
-          })}
-
+              return null
+            })
+          }
         </main>
       </div >
 
@@ -1217,6 +1351,9 @@ export default function Page() {
                   onClick={() => {
                     if (s.status === "offline") return
                     setStreams(prev => prev.map(p => p.channelId === s.channelId ? { ...p, enabled: !p.enabled } : p))
+                    if (theater && focusedId === s.channelId) {
+                      setFocusedId(null)
+                    }
                   }}
                 >
                   <span className="dot" />{s.name}
