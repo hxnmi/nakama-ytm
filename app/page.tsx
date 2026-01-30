@@ -64,6 +64,7 @@ export default function Page() {
   const players = useRef<Record<string, any>>({})
   const lastStatusRef = useRef<Record<string, StreamStatus>>({})
   const lastNotifyAtRef = useRef<Record<string, number>>({})
+  const lastMainIdRef = useRef<string | null>(null)
   const audioValues = useRef<{
     masterVolume: number;
     unfocusedVolume: number;
@@ -246,7 +247,9 @@ export default function Page() {
         const ids = visibleStreams.map(s => s.channelId)
         const mainId = (focusedId && ids.includes(focusedId))
           ? focusedId
-          : ids[0]
+          : (lastMainIdRef.current && ids.includes(lastMainIdRef.current))
+            ? lastMainIdRef.current
+            : ids[0]
 
         const thumbs = ids.filter(id => id !== mainId)
 
@@ -303,7 +306,9 @@ export default function Page() {
         const ids = visibleStreams.map(s => s.channelId)
         const mainId = (focusedId && ids.includes(focusedId))
           ? focusedId
-          : ids[0]
+          : (lastMainIdRef.current && ids.includes(lastMainIdRef.current))
+            ? lastMainIdRef.current
+            : ids[0]
 
         const thumbs = ids.filter(id => id !== mainId)
 
@@ -1265,6 +1270,15 @@ export default function Page() {
                     e.stopPropagation()
                     setFocusedId(prev => {
                       const next = prev === s.channelId ? null : s.channelId
+
+                      if (theater) {
+                        if (next === null) {
+                          lastMainIdRef.current = prev
+                        } else {
+                          lastMainIdRef.current = next
+                        }
+                      }
+
                       requestAnimationFrame(() => {
                         Object.entries(players.current).forEach(([id, player]) => {
                           if (!player) return

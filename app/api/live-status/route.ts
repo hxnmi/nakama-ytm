@@ -6,8 +6,8 @@ export const dynamic = 'force-dynamic'
 
 /* ================= CONFIG ================= */
 const API_KEY = process.env.YT_API_KEY!
-const FAST_TTL = 90 * 1000
-const NORMAL_TTL = 5 * 60 * 1000
+const FAST_TTL = 30 * 1000
+const NORMAL_TTL = 2 * 60 * 1000
 const DEPTH_STEPS = [3, 1]
 const OFFLINE_CONFIRM_POLLS = 3
 const ACTIVE_WINDOW_MS = 15 * 60 * 1000
