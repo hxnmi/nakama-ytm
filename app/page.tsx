@@ -220,14 +220,25 @@ export default function Page() {
       }
     }
     if (videoCount === 1) {
-      return {
-        cols: 2,
-        rows: 1,
-        mode: "sidechat" as "sidechat",
-        cells: [
-          { type: "video" as const, channelId: visibleStreams[0].channelId },
-          { type: "chat" as const, channelId: visibleStreams[0].channelId },
-        ],
+      if (showChat) {
+        return {
+          cols: 2,
+          rows: 1,
+          mode: "sidechat" as "sidechat",
+          cells: [
+            { type: "video" as const, channelId: visibleStreams[0].channelId },
+            { type: "chat" as const, channelId: visibleStreams[0].channelId },
+          ],
+        }
+      } else {
+        return {
+          cols: 1,
+          rows: 1,
+          mode: "grid" as "grid",
+          cells: [
+            { type: "video" as const, channelId: visibleStreams[0].channelId },
+          ],
+        }
       }
     }
     if (theater) {
@@ -239,27 +250,53 @@ export default function Page() {
 
         const thumbs = ids.filter(id => id !== mainId)
 
-        const cells = [
-          { type: "video", channelId: mainId, colStart: 1, rowStart: 1, colSpan: 3, rowSpan: 3 },
-          { type: "chat", channelId: mainId, colStart: 5, rowStart: 1, rowSpan: 5 },
-        ]
+        if (showChat) {
+          const cells = [
+            { type: "video", channelId: mainId, colStart: 1, rowStart: 1, colSpan: 3, rowSpan: 3 },
+            { type: "chat", channelId: mainId, colStart: 5, rowStart: 1, rowSpan: 5 },
+          ]
 
-        thumbs.forEach((id, j) => {
-          const cell: any = { type: "video", channelId: id }
-          if (j < 4) {
-            cell.colStart = undefined
-            cell.rowStart = 4
-          } else if (j < 7) {
-            cell.colStart = 4
-            cell.rowStart = j - 3
-          } else {
-            cell.colStart = undefined
-            cell.rowStart = 5
-          }
-          cells.push(cell)
-        })
+          thumbs.forEach((id, j) => {
+            const cell: any = { type: "video", channelId: id }
+            if (j < 4) {
+              cell.colStart = undefined
+              cell.rowStart = 4
+            } else if (j < 7) {
+              cell.colStart = 4
+              cell.rowStart = j - 3
+            } else {
+              cell.colStart = undefined
+              cell.rowStart = 5
+            }
+            cells.push(cell)
+          })
 
-        return { cols: 5, rows: 5, mode: "theater", cells }
+          return { cols: 5, rows: 5, mode: "theater", cells }
+        } else {
+          const mainRowSpan = videoCount === 4 ? 3 : videoCount === 5 ? 4 : 2
+          const cols = 4
+          const rows = Math.max(mainRowSpan, 2 + Math.ceil(Math.max(0, thumbs.length - 4) / 4))
+          const cells: any = [
+            { type: "video", channelId: mainId, colStart: 1, rowStart: 1, colSpan: 2, rowSpan: mainRowSpan },
+          ]
+
+          thumbs.forEach((id, j) => {
+            const cell: any = { type: "video", channelId: id }
+            if (j < 2) {
+              cell.colStart = 3
+              cell.rowStart = j + 1
+            } else if (j < 4) {
+              cell.colStart = 4
+              cell.rowStart = j - 1
+            } else {
+              cell.colStart = (j - 4) % 4 + 1
+              cell.rowStart = 3 + Math.floor((j - 4) / 4)
+            }
+            cells.push(cell)
+          })
+
+          return { cols, rows, mode: "theater", cells }
+        }
       }
 
       if (videoCount > 1) {
@@ -270,18 +307,34 @@ export default function Page() {
 
         const thumbs = ids.filter(id => id !== mainId)
 
-        const cells = [
-          { type: "video", channelId: mainId, colStart: 1, rowStart: 1, colSpan: 4, rowSpan: 4 },
-          { type: "chat", channelId: mainId, colStart: 5, rowStart: 1, rowSpan: 5 },
-          ...thumbs.map((id, i) => ({
-            type: "video",
-            channelId: id,
-            colStart: (i % 4) + 1,
-            rowStart: 5
-          })),
-        ]
+        if (showChat) {
+          const cells = [
+            { type: "video", channelId: mainId, colStart: 1, rowStart: 1, colSpan: 4, rowSpan: 4 },
+            { type: "chat", channelId: mainId, colStart: 5, rowStart: 1, rowSpan: 5 },
+            ...thumbs.map((id, i) => ({
+              type: "video",
+              channelId: id,
+              colStart: (i % 4) + 1,
+              rowStart: 5
+            })),
+          ]
 
-        return { cols: 5, rows: 5, mode: "theater", cells }
+          return { cols: 5, rows: 5, mode: "theater", cells }
+        } else {
+          const mainRowSpan = videoCount === 4 ? 3 : videoCount === 5 ? 4 : 2
+          const rows = Math.max(mainRowSpan, thumbs.length)
+          const cells = [
+            { type: "video", channelId: mainId, colStart: 1, rowStart: 1, colSpan: 3, rowSpan: mainRowSpan },
+            ...thumbs.map((id, i) => ({
+              type: "video",
+              channelId: id,
+              colStart: 4,
+              rowStart: i + 1
+            })),
+          ]
+
+          return { cols: 4, rows, mode: "theater", cells }
+        }
       }
     }
     else {
@@ -367,9 +420,13 @@ export default function Page() {
     if (layout.mode === "sidechat") return "minmax(0, 3fr) minmax(0, 1fr)";
     if (isCompactTitle && layout.mode === "2-sidechat") return "minmax(0, 1fr) minmax(0, 1fr)";
     if (layout.mode === "2-sidechat") return "minmax(0, 1.5fr) minmax(0, 1fr)";
-    if (layout.mode === "theater") return "minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.36fr)";
+    if (layout.mode === "theater") {
+      return showChat
+        ? "minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.36fr)"
+        : "repeat(4, 1fr)";
+    }
     return `repeat(${layout.cols}, 1fr)`;
-  }, [layout.mode, layout.cols]);
+  }, [layout.mode, layout.cols, showChat]);
 
   const gridTemplateRows = useMemo(
     () => (isMobile ? "auto" : `repeat(${layout.rows}, 1fr)`),
@@ -1268,7 +1325,7 @@ export default function Page() {
             )
           })}
           {
-            layout.cells.map((cell, i) => {
+            layout.cells.map((cell: any, i: number) => {
               if (cell.type === "chat") {
                 const s = streamMap.get(cell.channelId)
                 if (!s) return <div key={`empty-chat-${i}`} />
