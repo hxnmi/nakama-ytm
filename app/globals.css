@@ -710,6 +710,125 @@ select {
   border-bottom: 2px solid #aaa;
 }
 
+/* ================= HASHTAG PANEL ================= */
+.hashtag-panel {
+  position: fixed;
+  left: 0;
+  top: 52px;
+  width: 280px;
+  height: calc(100vh - 52px);
+  background: var(--panel-2);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.3);
+  padding-bottom: 87px;
+}
+
+.hashtag-panel-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.hashtag-panel-header strong {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.hashtag-panel-close {
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 18px;
+  padding: 0 4px;
+  transition: opacity 0.2s ease;
+}
+
+.hashtag-panel-close:hover {
+  opacity: 0.7;
+}
+
+.hashtag-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: #262633 transparent;
+}
+
+.hashtag-panel-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.hashtag-panel-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+}
+
+.hashtag-panel-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.hashtag-panel-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text);
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.hashtag-panel-item:hover {
+  background: var(--hover);
+  transform: translateY(-2px);
+}
+
+.hashtag-panel-item img {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.hashtag-panel-item-title {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+.hashtag-panel-item-channel {
+  font-size: 10px;
+  opacity: 0.7;
+  margin-top: 4px;
+  color: var(--text);
+}
+
+.hashtag-panel-loading,
+.hashtag-panel-empty {
+  text-align: center;
+  padding: 20px 0;
+  opacity: 0.6;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.hashtag-btn {
+  display: inline-flex;
+}
 
 /* ================= MOBILE ================= */
 @media (max-width: 1024px) {
@@ -787,6 +906,10 @@ select {
 }
 
 @media (max-width: 768px) {
+  .hashtag-btn {
+    display: none !important;
+  }
+
   .app {
     height: 1px;
     display: flex;

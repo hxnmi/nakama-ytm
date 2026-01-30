@@ -25,6 +25,15 @@ type ReminderState = {
   dismissed?: boolean
 }
 
+type HashtagResult = {
+  videoId: string
+  title: string
+  channelName: string
+  channelId: string
+  thumbnailUrl: string
+  viewerCount?: number
+}
+
 declare global {
   interface Window {
     YT: any
@@ -106,6 +115,10 @@ export default function Page() {
   const [streamInput, setStreamInput] = useState("")
   const [customStreams, setCustomStreams] = useState<Streamer[]>([])
   const [dropdownOpen, setDropdownOpen] = useState(false)
+
+  const [showHashtagPanel, setShowHashtagPanel] = useState(false)
+  const [hashtagResults, setHashtagResults] = useState<HashtagResult[]>([])
+  const [hashtagLoading, setHashtagLoading] = useState(false)
 
   const [viewport, setViewport] = useState({ w: 0 })
 
@@ -635,6 +648,51 @@ export default function Page() {
       return null
     }
   }
+
+  /* ================= HASHTAG SEARCH ================= */
+  async function fetchHashtagResults() {
+    setHashtagLoading(true)
+    try {
+      const res = await fetch("/api/hashtag-search")
+      const data: HashtagResult[] = await res.json()
+      setHashtagResults(data)
+    } catch (e) {
+      console.error("Hashtag search error:", e)
+    } finally {
+      setHashtagLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchHashtagResults()
+
+    const interval = setInterval(() => {
+      fetchHashtagResults()
+    }, 2 * 60 * 60 * 1000)
+
+    return () => clearInterval(interval)
+  }, [])
+
+  function addHashtagStreamToCustom(result: HashtagResult) {
+    setCustomStreams(prev => {
+      if (prev.some(s => s.channelId === `custom-${result.videoId}`)) {
+        return prev
+      }
+
+      return [
+        ...prev,
+        {
+          name: result.channelName,
+          channelId: `custom-${result.videoId}`,
+          status: "live",
+          liveVideoId: result.videoId,
+          enabled: true,
+          groups: ["Hashtag Discovery"],
+        },
+      ]
+    })
+  }
+
   /* ================= PLAYERS ================= */
   useEffect(() => {
     if (!ytReady) return
@@ -1115,6 +1173,13 @@ export default function Page() {
           >
             ☰
           </button>
+          <button
+            className="ui-btn hashtag-btn"
+            onClick={() => setShowHashtagPanel(prev => !prev)}
+            title="Discover streams with #imeroleplay"
+          >
+            🔍 #imeroleplay
+          </button>
           <div className="desktop-controls">
             <button
               className="ui-btn" style={{ display: "flex", alignItems: "center", gap: 8 }}
@@ -1239,6 +1304,19 @@ export default function Page() {
             )}
 
             <div className="mobile-menu-actions">
+              <button
+                onClick={() => {
+                  setShowHashtagPanel(prev => !prev)
+                  setMobileMenuOpen(false)
+                }}
+                className="ui-btn"
+                style={{ flex: 1 }}
+              >
+                🔍 #imeroleplay
+              </button>
+            </div>
+
+            <div className="mobile-menu-actions">
               <button onClick={() => { setShowOffline(prev => !prev); setMobileMenuOpen(false); }} className={`ui-btn ${showOffline ? 'enabled' : 'disabled'}`} style={{ flex: 1 }}>
                 {showOffline ? "Hide Offline" : "Show Offline"}
               </button>
@@ -1248,9 +1326,62 @@ export default function Page() {
       )}
 
       <div className="content">
+        {showHashtagPanel && (
+          <aside className="hashtag-panel">
+            <div className="hashtag-panel-header">
+              <strong>🔍 #imeroleplay</strong>
+              <button
+                className="hashtag-panel-close"
+                onClick={() => setShowHashtagPanel(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="hashtag-panel-content">
+              {hashtagLoading ? (
+                <div className="hashtag-panel-loading">
+                  Loading...
+                </div>
+              ) : hashtagResults.length === 0 ? (
+                <div className="hashtag-panel-empty">
+                  No results found
+                </div>
+              ) : (
+                hashtagResults.map(result => (
+                  <button
+                    key={result.videoId}
+                    className="hashtag-panel-item"
+                    onClick={() => addHashtagStreamToCustom(result)}
+                  >
+                    {result.thumbnailUrl && (
+                      <img
+                        src={result.thumbnailUrl}
+                        alt={result.title}
+                      />
+                    )}
+                    <div>
+                      <div className="hashtag-panel-item-title">
+                        {result.title.length > 50 ? result.title.substring(0, 50) + "..." : result.title}
+                      </div>
+                      <div className="hashtag-panel-item-channel">
+                        {result.channelName}
+                      </div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </aside>
+        )}
         <main
           className="canvas"
-          style={{ gridTemplateColumns, gridTemplateRows }}
+          style={{
+            gridTemplateColumns,
+            gridTemplateRows,
+            marginLeft: showHashtagPanel ? 280 : 0,
+            transition: "margin-left 0.3s"
+          }}
         >
           {visibleStreams.map(s => {
             const cell = positions.get(`video-${s.channelId}`)
