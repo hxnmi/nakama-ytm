@@ -1163,6 +1163,13 @@ export default function Page() {
               removeCustomStream={removeCustomStream}
             />
           )}
+          <button
+            className="ui-btn hashtag-btn"
+            onClick={() => setShowHashtagPanel(prev => !prev)}
+            title="Discover streams with #imeroleplay"
+          >
+            🔍 #imeroleplay
+          </button>
         </div>
         <div className="header-right">
           <button
@@ -1172,13 +1179,6 @@ export default function Page() {
             title="Open menu"
           >
             ☰
-          </button>
-          <button
-            className="ui-btn hashtag-btn"
-            onClick={() => setShowHashtagPanel(prev => !prev)}
-            title="Discover streams with #imeroleplay"
-          >
-            🔍 #imeroleplay
           </button>
           <div className="desktop-controls">
             <button

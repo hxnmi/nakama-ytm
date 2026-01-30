@@ -169,7 +169,7 @@ export default function AdminPage() {
         setDragging(channelId)
     }
 
-    function onDrop(targetId: string) {
+    async function onDrop(targetId: string) {
         if (!config || !dragging || dragging === targetId) return
 
         const list = [...config.streamers].sort(
@@ -186,7 +186,14 @@ export default function AdminPage() {
         const next = list.map((s, i) => ({ ...s, order: i }))
 
         setConfig({ ...config, streamers: next })
-        next.forEach(save)
+
+        await Promise.all(next.map(async (s) => {
+            try {
+                await save(s)
+            } catch (err) {
+                console.error(`Failed to save order for ${s.channelId}:`, err)
+            }
+        }))
 
         setDragging(null)
     }

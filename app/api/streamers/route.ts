@@ -8,6 +8,7 @@ type StreamerConfig = {
     channelId: string
     groups: string[]
     enabled: boolean
+    order?: number
 }
 
 type StreamersConfig = {
@@ -23,13 +24,43 @@ function requireAdmin(req: Request) {
 }
 
 export async function GET(req: Request) {
-    requireAdmin(req)
+    const url = new URL(req.url)
+    const shouldRefresh = url.searchParams.get("refresh") === "true"
+
+    if (shouldRefresh) {
+        const secret = url.searchParams.get("secret")
+        if (secret !== process.env.CRON_SECRET) {
+            return new Response("Unauthorized", { status: 401 })
+        }
+    } else {
+        requireAdmin(req)
+    }
 
     const config: StreamersConfig =
         (await kv.get(CONFIG_KEY)) ?? {
             groups: ["A4A", "NMC"],
             streamers: [],
         }
+
+    if (shouldRefresh) {
+        const updatedStreamers = await Promise.all(
+            config.streamers.map(async (streamer) => {
+                try {
+                    const freshName = await fetchChannelName(streamer.channelId)
+                    if (freshName && freshName !== streamer.name) {
+                        return { ...streamer, name: freshName }
+                    }
+                    return streamer
+                } catch {
+                    return streamer
+                }
+            })
+        )
+
+        const updated = { ...config, streamers: updatedStreamers }
+        await kv.set(CONFIG_KEY, updated)
+        return NextResponse.json({ ok: true, refreshed: true })
+    }
 
     return NextResponse.json(config)
 }
@@ -67,6 +98,7 @@ export async function POST(req: Request) {
         channelId: body.channelId,
         groups: body.groups ?? [],
         enabled: body.enabled ?? true,
+        order: body.order ?? undefined,
     }
 
     const idx = config.streamers.findIndex(
@@ -82,6 +114,49 @@ export async function POST(req: Request) {
     await kv.set(CONFIG_KEY, config)
 
     return NextResponse.json({ ok: true })
+}
+
+export async function PUT(req: Request) {
+    requireAdmin(req)
+
+    const config = await kv.get<StreamersConfig>(CONFIG_KEY)
+
+    if (!config || !Array.isArray(config.streamers)) {
+        return NextResponse.json({ error: "Config not found" }, { status: 404 })
+    }
+
+    let updated = 0
+    let failed = 0
+
+    const updatedStreamers = await Promise.all(
+        config.streamers.map(async (streamer) => {
+            try {
+                const freshName = await fetchChannelName(streamer.channelId)
+
+                if (freshName && freshName !== streamer.name) {
+                    console.log(`Updated: ${streamer.name} → ${freshName}`)
+                    updated++
+                    return { ...streamer, name: freshName }
+                }
+
+                return streamer
+            } catch (error) {
+                console.error(`Failed to fetch name for ${streamer.channelId}:`, error)
+                failed++
+                return streamer
+            }
+        })
+    )
+
+    await kv.set(CONFIG_KEY, { ...config, streamers: updatedStreamers })
+
+    return NextResponse.json({
+        ok: true,
+        updated,
+        failed,
+        total: config.streamers.length,
+        message: `Refreshed ${config.streamers.length} streamers. Updated: ${updated}, Failed: ${failed}`
+    })
 }
 
 export async function DELETE(req: Request) {
