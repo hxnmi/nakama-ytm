@@ -828,19 +828,33 @@ export default function Page() {
 
     streams.forEach(s => {
       s.groups?.forEach(g => {
-        if (!map.has(g)) map.set(g, [])
-        map.get(g)!.push(s)
+        const groupKey = (g === "NMC" || g === "EX") ? "NMC" : g
+        if (!map.has(groupKey)) map.set(groupKey, [])
+        map.get(groupKey)!.push(s)
       })
     })
 
-    return Array.from(map.entries()).map(([name, streams]) => ({
+    const groupOrder = ["A4A", "NMC"]
+    const entries = Array.from(map.entries()).sort(([a], [b]) => {
+      const aIdx = groupOrder.indexOf(a)
+      const bIdx = groupOrder.indexOf(b)
+      return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx)
+    })
+
+    return entries.map(([name, groupStreams]) => ({
       name,
-      streams: streams
+      streams: groupStreams
         .filter(s => showOffline || s.status !== "offline")
-        .sort(
-          (a, b) =>
-            STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status]
-        ),
+        .sort((a, b) => {
+          const statusDiff = STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status]
+          if (statusDiff !== 0) return statusDiff
+
+          const aIsEX = a.groups.includes("EX")
+          const bIsEX = b.groups.includes("EX")
+          if (aIsEX !== bIsEX) return aIsEX ? 1 : -1
+
+          return 0
+        }),
     }))
   }, [streams, showOffline])
 

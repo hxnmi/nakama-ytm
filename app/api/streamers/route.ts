@@ -36,11 +36,16 @@ export async function GET(req: Request) {
         requireAdmin(req)
     }
 
-    const config: StreamersConfig =
+    let config: StreamersConfig =
         (await kv.get(CONFIG_KEY)) ?? {
-            groups: ["A4A", "NMC"],
+            groups: ["A4A", "NMC", "EX"],
             streamers: [],
         }
+
+    if (!config.groups.includes("EX")) {
+        config = { ...config, groups: [...config.groups, "EX"] }
+        await kv.set(CONFIG_KEY, config)
+    }
 
     if (shouldRefresh) {
         const updatedStreamers = await Promise.all(
@@ -82,11 +87,15 @@ export async function POST(req: Request) {
 
     const body = await req.json()
 
-    const config: StreamersConfig =
+    let config: StreamersConfig =
         (await kv.get(CONFIG_KEY)) ?? {
-            groups: ["A4A", "NMC"],
+            groups: ["A4A", "NMC", "EX"],
             streamers: [],
         }
+
+    if (!config.groups.includes("EX")) {
+        config = { ...config, groups: [...config.groups, "EX"] }
+    }
 
     const channelName =
         body.name ??

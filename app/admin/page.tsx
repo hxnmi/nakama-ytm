@@ -25,7 +25,6 @@ export default function AdminPage() {
 
     const [search, setSearch] = useState("")
     const [sort, setSort] = useState<"order" | "az" | "za" | "group">("order")
-    const [dragging, setDragging] = useState<string | null>(null)
 
     const [isSmall, setIsVerySmall] = useState(false);
 
@@ -165,37 +164,44 @@ export default function AdminPage() {
         return list
     }
 
-    function onDragStart(channelId: string) {
-        setDragging(channelId)
+    const moveUp = async (channelId: string) => {
+        if (!config) return
+        const visible = getVisibleStreamers()
+        const index = visible.findIndex(s => s.channelId === channelId)
+        if (index <= 0) return
+
+        const movedItem = visible[index]
+        const targetItem = visible[index - 1]
+
+        const updated = config.streamers.map(s => {
+            if (s.channelId === movedItem.channelId) return { ...s, order: targetItem.order ?? 0 }
+            if (s.channelId === targetItem.channelId) return { ...s, order: movedItem.order ?? 0 }
+            return s
+        })
+
+        setConfig({ ...config, streamers: updated })
+
+        await Promise.all([save({ ...movedItem, order: targetItem.order ?? 0 }), save({ ...targetItem, order: movedItem.order ?? 0 })])
     }
 
-    async function onDrop(targetId: string) {
-        if (!config || !dragging || dragging === targetId) return
+    const moveDown = async (channelId: string) => {
+        if (!config) return
+        const visible = getVisibleStreamers()
+        const index = visible.findIndex(s => s.channelId === channelId)
+        if (index < 0 || index >= visible.length - 1) return
 
-        const list = [...config.streamers].sort(
-            (a, b) => (a.order ?? 0) - (b.order ?? 0)
-        )
+        const movedItem = visible[index]
+        const targetItem = visible[index + 1]
 
-        const from = list.findIndex(s => s.channelId === dragging)
-        const to = list.findIndex(s => s.channelId === targetId)
-        if (from < 0 || to < 0) return
+        const updated = config.streamers.map(s => {
+            if (s.channelId === movedItem.channelId) return { ...s, order: targetItem.order ?? 0 }
+            if (s.channelId === targetItem.channelId) return { ...s, order: movedItem.order ?? 0 }
+            return s
+        })
 
-        const moved = list.splice(from, 1)[0]
-        list.splice(to, 0, moved)
+        setConfig({ ...config, streamers: updated })
 
-        const next = list.map((s, i) => ({ ...s, order: i }))
-
-        setConfig({ ...config, streamers: next })
-
-        await Promise.all(next.map(async (s) => {
-            try {
-                await save(s)
-            } catch (err) {
-                console.error(`Failed to save order for ${s.channelId}:`, err)
-            }
-        }))
-
-        setDragging(null)
+        await Promise.all([save({ ...movedItem, order: targetItem.order ?? 0 }), save({ ...targetItem, order: movedItem.order ?? 0 })])
     }
 
     useEffect(() => {
@@ -277,7 +283,7 @@ export default function AdminPage() {
             </div>
             {sort !== "order" && (
                 <div className="admin-hint">
-                    Sorting is active — switch to <b>Manual order</b> to drag
+                    Sorting is active — switch to <b>Manual order</b> to use up/down buttons
                 </div>
             )}
             <div className="admin-list">
@@ -285,10 +291,6 @@ export default function AdminPage() {
                     <div
                         key={s.channelId}
                         className="admin-row"
-                        draggable={sort === "order"}
-                        onDragStart={() => onDragStart(s.channelId)}
-                        onDragOver={e => sort === "order" && e.preventDefault()}
-                        onDrop={() => onDrop(s.channelId)}
                     >
                         <div
                             className="admin-main"
@@ -322,6 +324,12 @@ export default function AdminPage() {
                         </div>
 
                         <div className="admin-actions">
+                            {sort === "order" && (
+                                <>
+                                    <button onClick={() => moveUp(s.channelId)}>↑ Up</button>
+                                    <button onClick={() => moveDown(s.channelId)}>↓ Down</button>
+                                </>
+                            )}
                             <label className="toggle">
                                 <input
                                     type="checkbox"
