@@ -17,15 +17,15 @@
 }
 
 .theme-light {
-  --bg: #e9d9bd;
-  --bg-2: hsl(44, 100%, 89%);
-  --panel: #f0ead9;
-  --panel-2: #f8e4ae;
-  --hover: #dcdce2;
-  --text: #111;
-  --muted: #666;
-  --label: rgba(255, 251, 228, 0.75);
-  --border: rgba(0, 0, 0, 0.06);
+  --bg: #f6f7f9;
+  --bg-2: #eef1f5;
+  --panel: #ffffff;
+  --panel-2: #f7f8fb;
+  --hover: #e9edf3;
+  --text: #1f2937;
+  --muted: #6b7280;
+  --label: rgba(255, 255, 255, 0.75);
+  --border: rgba(0, 0, 0, 0.08);
 }
 
 html,
@@ -434,7 +434,7 @@ body {
   overflow-y: hidden;
   white-space: nowrap;
   scrollbar-width: thin;
-  scrollbar-color: #262633 transparent;
+  scrollbar-color: var(--hover) transparent;
 }
 
 .group-streams::-webkit-scrollbar {
@@ -520,7 +520,7 @@ body {
 }
 
 .toggle-pill.live:hover {
-  background: #262633;
+  background: var(--hover);
 }
 
 /* ================= NOTIFICATIONS ================= */

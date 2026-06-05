@@ -16,6 +16,10 @@ type StreamersConfig = {
     streamers: StreamerConfig[]
 }
 
+type StreamerPatch = Partial<Pick<StreamerConfig, "name" | "groups" | "enabled" | "order">> & {
+    channelId: string
+}
+
 function requireAdmin(req: Request) {
     const auth = req.headers.get("authorization")
     if (auth !== `Bearer ${process.env.ADMIN_TOKEN}`) {
@@ -165,6 +169,80 @@ export async function PUT(req: Request) {
         failed,
         total: config.streamers.length,
         message: `Refreshed ${config.streamers.length} streamers. Updated: ${updated}, Failed: ${failed}`
+    })
+}
+
+export async function PATCH(req: Request) {
+    requireAdmin(req)
+
+    const body = await req.json().catch(() => null)
+    const rawUpdates = body?.updates
+
+    if (!Array.isArray(rawUpdates)) {
+        return NextResponse.json({ error: "updates must be an array" }, { status: 400 })
+    }
+
+    if (rawUpdates.length > 500) {
+        return NextResponse.json({ error: "Too many updates in one request" }, { status: 413 })
+    }
+
+    const config = await kv.get<StreamersConfig>(CONFIG_KEY)
+
+    if (!config || !Array.isArray(config.streamers)) {
+        return NextResponse.json({ error: "Config not found" }, { status: 404 })
+    }
+
+    const patchByChannelId = new Map<string, StreamerPatch>()
+
+    for (const item of rawUpdates) {
+        if (!item || typeof item.channelId !== "string") continue
+
+        const patch: StreamerPatch = { channelId: item.channelId }
+
+        if (typeof item.name === "string") patch.name = item.name
+        if (Array.isArray(item.groups)) patch.groups = item.groups
+        if (typeof item.enabled === "boolean") patch.enabled = item.enabled
+        if (typeof item.order === "number") patch.order = item.order
+
+        patchByChannelId.set(item.channelId, patch)
+    }
+
+    if (!patchByChannelId.size) {
+        return NextResponse.json({ error: "No valid updates provided" }, { status: 400 })
+    }
+
+    let updated = 0
+
+    const nextStreamers = config.streamers.map((streamer) => {
+        const patch = patchByChannelId.get(streamer.channelId)
+        if (!patch) return streamer
+
+        const next = {
+            ...streamer,
+            ...patch,
+            channelId: streamer.channelId,
+        }
+
+        if (
+            next.name !== streamer.name ||
+            next.enabled !== streamer.enabled ||
+            next.order !== streamer.order ||
+            JSON.stringify(next.groups) !== JSON.stringify(streamer.groups)
+        ) {
+            updated++
+        }
+
+        return next
+    })
+
+    if (updated > 0) {
+        await kv.set(CONFIG_KEY, { ...config, streamers: nextStreamers })
+    }
+
+    return NextResponse.json({
+        ok: true,
+        requested: patchByChannelId.size,
+        updated,
     })
 }
 

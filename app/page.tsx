@@ -132,14 +132,33 @@ export default function Page() {
       s => s.enabled && s.liveVideoId && s.status !== "offline"
     )
 
+    const orderIndex = (channelId: string) => {
+      const index = order.indexOf(channelId)
+      return index === -1 ? Number.MAX_SAFE_INTEGER : index
+    }
+
     return filtered.sort((a, b) => {
+      const orderDiff = orderIndex(a.channelId) - orderIndex(b.channelId)
+      if (orderDiff !== 0) return orderDiff
       return (STATUS_PRIORITY[a.status] ?? 4) - (STATUS_PRIORITY[b.status] ?? 4)
     })
-  }, [streams])
+  }, [streams, order])
 
   const streamMap = useMemo(
     () => new Map(visibleStreams.map(s => [s.channelId, s])),
     [visibleStreams]
+  )
+
+  const renderStreams = useMemo(
+    () => streams.filter(s => s.liveVideoId && s.status !== "offline"),
+    [streams]
+  )
+
+  const streamPlaybackSignature = useMemo(
+    () => streams
+      .map(s => `${s.channelId}:${s.enabled ? 1 : 0}:${s.status}:${s.liveVideoId ?? ""}`)
+      .join("|"),
+    [streams]
   )
 
   const layout = useMemo(() => {
@@ -697,25 +716,41 @@ export default function Page() {
   useEffect(() => {
     if (!ytReady) return
 
-    streams.forEach(s => {
+    streams.forEach((s: Streamer) => {
       if (!s.liveVideoId || s.status === "offline") return
 
       const id = s.channelId
       const el = document.getElementById(`player-${id}`)
       if (!el) return
 
-      if (players.current[id]) return
+      const existingPlayer = players.current[id]
+      const iframe = existingPlayer?.getIframe?.()
+
+      if (existingPlayer && iframe?.isConnected) return
+
+      if (existingPlayer) {
+        try {
+          existingPlayer.destroy?.()
+        } catch { }
+        delete players.current[id]
+      }
 
       players.current[id] = new window.YT.Player(el, {
         videoId: s.liveVideoId,
         playerVars: {
-          autoplay: 1,
+          autoplay: s.enabled ? 1 : 0,
           playsinline: 1,
           rel: 0,
           enablejsapi: 1,
         },
         events: {
           onReady: (e: any) => {
+            e.target.mute()
+
+            if (!s.enabled) {
+              return
+            }
+
             const isFocused = id === focusedId
             const isMain = !focusedId || isFocused
 
@@ -734,15 +769,18 @@ export default function Page() {
         },
       })
     })
-  }, [ytReady, streams])
+  }, [streams])
 
   useEffect(() => {
-    streams.forEach(s => {
-      const id = s.channelId
-      if (!s.enabled && players.current[id]) {
-        players.current[id].destroy()
-        delete players.current[id]
-      }
+    streams.forEach((s: Streamer) => {
+      if (s.enabled) return
+
+      const player = players.current[s.channelId]
+      if (!player) return
+
+      try {
+        player.mute?.()
+      } catch { }
     })
   }, [streams])
 
@@ -774,12 +812,20 @@ export default function Page() {
         delete players.current[id]
       }
     })
-  }, [streams])
+  }, [streamPlaybackSignature])
 
   /* ================= AUDIO CONTROL ================= */
   useEffect(() => {
     Object.entries(players.current).forEach(([id, player]) => {
       if (!player) return
+
+      const stream = streams.find(s => s.channelId === id)
+      if (!stream) return
+
+      if (!stream.enabled) {
+        safeApplyAudio(player, 0, true)
+        return
+      }
 
       const isFocused = id === focusedId
       const isMain = !focusedId || isFocused
@@ -796,7 +842,7 @@ export default function Page() {
         !isMain && audioMode === "mute"
       )
     })
-  }, [focusedId, audioMode, unfocusedVolume, masterVolume])
+  }, [streamPlaybackSignature, focusedId, audioMode, unfocusedVolume, masterVolume])
 
   function safeApplyAudio(
     player: any,
@@ -823,6 +869,25 @@ export default function Page() {
     }
   }, [notifications])
 
+  useEffect(() => {
+    setOrder(prev => {
+      const currentIds = streams.map(s => s.channelId)
+      const next = prev.filter(id => currentIds.includes(id))
+
+      currentIds.forEach(id => {
+        if (!next.includes(id)) {
+          next.push(id)
+        }
+      })
+
+      if (next.length === prev.length && next.every((id, index) => id === prev[index])) {
+        return prev
+      }
+
+      return next
+    })
+  }, [streams])
+
   const footerGroups = useMemo(() => {
     const map = new Map<string, Streamer[]>()
 
@@ -846,6 +911,9 @@ export default function Page() {
       streams: groupStreams
         .filter(s => showOffline || s.status !== "offline")
         .sort((a, b) => {
+          const orderDiff = order.indexOf(a.channelId) - order.indexOf(b.channelId)
+          if (orderDiff !== 0) return orderDiff
+
           const statusDiff = STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status]
           if (statusDiff !== 0) return statusDiff
 
@@ -856,7 +924,7 @@ export default function Page() {
           return 0
         }),
     }))
-  }, [streams, showOffline])
+  }, [streams, showOffline, order])
 
   useEffect(() => {
     if (!focusedId) return
@@ -893,6 +961,15 @@ export default function Page() {
       },
     }))
   }
+
+  useEffect(() => {
+    if (!focusedId) return
+
+    const focusedStream = streams.find(s => s.channelId === focusedId)
+    if (!focusedStream || !focusedStream.enabled) {
+      setFocusedId(null)
+    }
+  }, [focusedId, streams])
 
   useEffect(() => {
     localStorage.setItem(
@@ -1007,7 +1084,10 @@ export default function Page() {
         p.channelId === id ? { ...p, enabled: !p.enabled } : p
       )
     setStreams(updateStreams)
-    setCustomStreams(updateStreams)
+
+    if (id.startsWith("custom-")) {
+      setCustomStreams(updateStreams)
+    }
   }
 
   function removeCustomStream(id: string) {
@@ -1397,13 +1477,13 @@ export default function Page() {
             transition: "margin-left 0.3s"
           }}
         >
-          {visibleStreams.map(s => {
+          {renderStreams.map(s => {
             const cell = positions.get(`video-${s.channelId}`)
             const isFocused = s.channelId === focusedId
             return (
               <div
                 key={s.channelId}
-                className={`stream-card ${isFocused ? "focused" : ""}`}
+                className={`stream-card ${isFocused ? "focused" : ""} ${s.enabled ? "" : "hidden"}`}
                 style={layout.mode === "theater" && cell ? getGridStyle(cell) : getGridStyle(cell)}
               >
                 <div className="video-wrap">
@@ -1566,10 +1646,32 @@ export default function Page() {
                   className={`toggle-pill ${s.status} ${s.enabled ? "enabled" : "disabled"}`}
                   onClick={() => {
                     if (s.status === "offline") return
+                    const nextEnabled = !s.enabled
+
                     setStreams(prev => prev.map(p => p.channelId === s.channelId ? { ...p, enabled: !p.enabled } : p))
-                    if (theater && focusedId === s.channelId) {
+                    if (s.channelId.startsWith("custom-")) {
+                      setCustomStreams(prev => prev.map(p => p.channelId === s.channelId ? { ...p, enabled: !p.enabled } : p))
+                    }
+                    if (focusedId === s.channelId) {
                       setFocusedId(null)
                     }
+
+                    requestAnimationFrame(() => {
+                      const player = players.current[s.channelId]
+                      if (!player) return
+
+                      if (nextEnabled) {
+                        try {
+                          player.unMute?.()
+                          player.setVolume?.(audioValues.current.masterVolume)
+                          player.playVideo?.()
+                        } catch { }
+                      } else {
+                        try {
+                          player.mute?.()
+                        } catch { }
+                      }
+                    })
                   }}
                 >
                   <span className="dot" />{s.name}

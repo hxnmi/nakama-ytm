@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import "./admin.css"
 
 type StreamerConfig = {
@@ -27,6 +27,7 @@ export default function AdminPage() {
     const [sort, setSort] = useState<"order" | "az" | "za" | "group">("order")
 
     const [isSmall, setIsVerySmall] = useState(false);
+    const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
     /* ================= LOAD CONFIG ================= */
     useEffect(() => {
@@ -49,6 +50,18 @@ export default function AdminPage() {
 
     /* ================= HELPERS ================= */
 
+    function scheduleSave(streamer: StreamerConfig, delayMs = 450) {
+        const existingTimer = saveTimers.current[streamer.channelId]
+        if (existingTimer) {
+            clearTimeout(existingTimer)
+        }
+
+        saveTimers.current[streamer.channelId] = setTimeout(() => {
+            void save(streamer)
+            delete saveTimers.current[streamer.channelId]
+        }, delayMs)
+    }
+
     function updateStreamer(
         channelId: string,
         patch: Partial<StreamerConfig>
@@ -65,7 +78,12 @@ export default function AdminPage() {
         setConfig(next)
 
         const updated = next.streamers.find(s => s.channelId === channelId)!
-        save(updated)
+        if (typeof patch.name === "string") {
+            scheduleSave(updated)
+            return
+        }
+
+        void save(updated)
     }
 
     async function save(streamer: StreamerConfig) {
@@ -76,6 +94,19 @@ export default function AdminPage() {
                 Authorization: `Bearer ${token}`,
             },
             body: JSON.stringify(streamer),
+        })
+    }
+
+    async function saveMany(updates: Array<Partial<StreamerConfig> & { channelId: string }>) {
+        if (!updates.length) return
+
+        await fetch("/api/streamers", {
+            method: "PATCH",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ updates }),
         })
     }
 
@@ -166,42 +197,40 @@ export default function AdminPage() {
 
     const moveUp = async (channelId: string) => {
         if (!config) return
-        const visible = getVisibleStreamers()
-        const index = visible.findIndex(s => s.channelId === channelId)
+        const ordered = [...config.streamers].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        const index = ordered.findIndex(s => s.channelId === channelId)
         if (index <= 0) return
 
-        const movedItem = visible[index]
-        const targetItem = visible[index - 1]
+        const swapped = [...ordered]
+        const temp = swapped[index - 1]
+        swapped[index - 1] = swapped[index]
+        swapped[index] = temp
 
-        const updated = config.streamers.map(s => {
-            if (s.channelId === movedItem.channelId) return { ...s, order: targetItem.order ?? 0 }
-            if (s.channelId === targetItem.channelId) return { ...s, order: movedItem.order ?? 0 }
-            return s
-        })
+        const reordered = swapped.map((s, i) => ({ ...s, order: i + 1 }))
+        setConfig({ ...config, streamers: reordered })
 
-        setConfig({ ...config, streamers: updated })
-
-        await Promise.all([save({ ...movedItem, order: targetItem.order ?? 0 }), save({ ...targetItem, order: movedItem.order ?? 0 })])
+        await saveMany(
+            reordered.map(s => ({ channelId: s.channelId, order: s.order }))
+        )
     }
 
     const moveDown = async (channelId: string) => {
         if (!config) return
-        const visible = getVisibleStreamers()
-        const index = visible.findIndex(s => s.channelId === channelId)
-        if (index < 0 || index >= visible.length - 1) return
+        const ordered = [...config.streamers].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        const index = ordered.findIndex(s => s.channelId === channelId)
+        if (index < 0 || index >= ordered.length - 1) return
 
-        const movedItem = visible[index]
-        const targetItem = visible[index + 1]
+        const swapped = [...ordered]
+        const temp = swapped[index + 1]
+        swapped[index + 1] = swapped[index]
+        swapped[index] = temp
 
-        const updated = config.streamers.map(s => {
-            if (s.channelId === movedItem.channelId) return { ...s, order: targetItem.order ?? 0 }
-            if (s.channelId === targetItem.channelId) return { ...s, order: movedItem.order ?? 0 }
-            return s
-        })
+        const reordered = swapped.map((s, i) => ({ ...s, order: i + 1 }))
+        setConfig({ ...config, streamers: reordered })
 
-        setConfig({ ...config, streamers: updated })
-
-        await Promise.all([save({ ...movedItem, order: targetItem.order ?? 0 }), save({ ...targetItem, order: movedItem.order ?? 0 })])
+        await saveMany(
+            reordered.map(s => ({ channelId: s.channelId, order: s.order }))
+        )
     }
 
     useEffect(() => {
@@ -210,6 +239,12 @@ export default function AdminPage() {
         window.addEventListener("resize", check);
         return () => window.removeEventListener("resize", check);
     }, []);
+
+    useEffect(() => {
+        return () => {
+            Object.values(saveTimers.current).forEach(clearTimeout)
+        }
+    }, [])
 
     /* ================= TOKEN GATE ================= */
     if (!token) {
@@ -326,8 +361,8 @@ export default function AdminPage() {
                         <div className="admin-actions">
                             {sort === "order" && (
                                 <>
-                                    <button onClick={() => moveUp(s.channelId)}>↑ Up</button>
-                                    <button onClick={() => moveDown(s.channelId)}>↓ Down</button>
+                                    <button className="move" onClick={() => moveUp(s.channelId)}>↑ Up</button>
+                                    <button className="move" onClick={() => moveDown(s.channelId)}>↓ Down</button>
                                 </>
                             )}
                             <label className="toggle">
