@@ -841,6 +841,19 @@ export default function Page() {
     delete players.current[id]
   }
 
+  useEffect(() => {
+    streams.forEach((s: Streamer) => {
+      if (s.enabled || activePlayerSet.has(s.channelId)) return
+
+      const player = players.current[s.channelId]
+      if (!player) return
+
+      try {
+        player.mute?.()
+      } catch { }
+    })
+  }, [streams, activePlayerSet])
+
   function extractYouTubeVideoId(url: string): string | null {
     try {
       const u = new URL(url)
@@ -1274,7 +1287,7 @@ export default function Page() {
               alt="Nakama"
               className="logo"
               draggable={false}
-            />
+            />&nbsp;
             <h1>{isCompactTitle ? "Nakama YTM" : "Nakama Youtube MultiView"}</h1>
             <span className="tooltip">
               Created by hxnmi for nakama #NFFN
@@ -1740,6 +1753,21 @@ export default function Page() {
                     if (focusedId === s.channelId) {
                       setFocusedId(null)
                     }
+                    requestAnimationFrame(() => {
+                      const player = players.current[s.channelId]
+                      if (!player) return
+
+                      if (nextEnabled) {
+                        try {
+                          player.unMute?.()
+                          player.setVolume?.(audioValues.current.masterVolume)
+                        } catch { }
+                      } else {
+                        try {
+                          player.mute?.()
+                        } catch { }
+                      }
+                    })
                   }}
                 >
                   <span className="dot" />{s.name}
