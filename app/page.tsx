@@ -109,6 +109,7 @@ export default function Page() {
   const [theme, setTheme] = useState<"dark" | "light">("dark")
   const [theater, setTheater] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [rampedActivePlayerIds, setRampedActivePlayerIds] = useState<string[]>([])
 
   const liveCount = streams.filter(s => s.status === "live").length
 
@@ -154,12 +155,62 @@ export default function Page() {
     [streams]
   )
 
-  const streamPlaybackSignature = useMemo(
-    () => streams
-      .map(s => `${s.channelId}:${s.enabled ? 1 : 0}:${s.status}:${s.liveVideoId ?? ""}`)
-      .join("|"),
-    [streams]
+  const rampOrder = useMemo(() => {
+    const ids = visibleStreams.map(s => s.channelId)
+    if (focusedId && ids.includes(focusedId)) {
+      return [focusedId, ...ids.filter(id => id !== focusedId)]
+    }
+
+    return ids
+  }, [visibleStreams, focusedId])
+
+  const activePlayerIds = useMemo(
+    () => rampedActivePlayerIds.filter(id => rampOrder.includes(id)),
+    [rampedActivePlayerIds, rampOrder]
   )
+
+  const activePlayerSet = useMemo(
+    () => new Set(activePlayerIds),
+    [activePlayerIds]
+  )
+
+  const streamPlaybackSignature = useMemo(
+    () => activePlayerIds.join("|"),
+    [activePlayerIds]
+  )
+
+  useEffect(() => {
+    setRampedActivePlayerIds(prev => {
+      const current = prev.filter(id => rampOrder.includes(id))
+      if (current.length === 0 && rampOrder.length > 0) {
+        return [rampOrder[0]]
+      }
+
+      if (current.length === prev.length && current.every((id, index) => id === prev[index])) {
+        return prev
+      }
+
+      return current
+    })
+  }, [rampOrder])
+
+  useEffect(() => {
+    if (!rampOrder.length) return
+    if (rampedActivePlayerIds.length >= rampOrder.length) return
+
+    const delayMs = isMobile ? 1800 : 1000
+    const timer = window.setTimeout(() => {
+      setRampedActivePlayerIds(prev => {
+        const current = prev.filter(id => rampOrder.includes(id))
+        if (current.length >= rampOrder.length) return current
+
+        const nextId = rampOrder.find(id => !current.includes(id))
+        return nextId ? [...current, nextId] : current
+      })
+    }, delayMs)
+
+    return () => window.clearTimeout(timer)
+  }, [rampOrder, rampedActivePlayerIds.length, isMobile])
 
   const layout = useMemo(() => {
     const videoCount = visibleStreams.length
@@ -717,6 +768,7 @@ export default function Page() {
     if (!ytReady) return
 
     streams.forEach((s: Streamer) => {
+      if (!activePlayerSet.has(s.channelId)) return
       if (!s.liveVideoId || s.status === "offline") return
 
       const id = s.channelId
@@ -730,7 +782,8 @@ export default function Page() {
 
       if (existingPlayer) {
         try {
-          existingPlayer.destroy?.()
+          existingPlayer.stopVideo?.()
+          existingPlayer.mute?.()
         } catch { }
         delete players.current[id]
       }
@@ -765,24 +818,28 @@ export default function Page() {
 
             e.target.setVolume(vol)
             vol === 0 ? e.target.mute() : e.target.unMute()
+            e.target.playVideo?.()
           },
         },
       })
     })
-  }, [streams])
+  }, [streams, activePlayerSet, focusedId, ytReady])
 
-  useEffect(() => {
-    streams.forEach((s: Streamer) => {
-      if (s.enabled) return
+  function safeDestroyPlayer(id: string) {
+    const player = players.current[id]
+    if (!player) return
 
-      const player = players.current[s.channelId]
-      if (!player) return
+    try {
+      player.destroy?.()
+    } catch { }
 
-      try {
-        player.mute?.()
-      } catch { }
-    })
-  }, [streams])
+    try {
+      player.stopVideo?.()
+      player.mute?.()
+    } catch { }
+
+    delete players.current[id]
+  }
 
   function extractYouTubeVideoId(url: string): string | null {
     try {
@@ -802,17 +859,12 @@ export default function Page() {
   }
 
   useEffect(() => {
-    const activeIds = new Set(
-      streams.filter(s => s.liveVideoId).map(s => s.channelId)
-    )
-
     Object.keys(players.current).forEach(id => {
-      if (!activeIds.has(id)) {
-        players.current[id].destroy()
-        delete players.current[id]
+      if (!activePlayerSet.has(id)) {
+        safeDestroyPlayer(id)
       }
     })
-  }, [streamPlaybackSignature])
+  }, [streamPlaybackSignature, activePlayerSet])
 
   /* ================= AUDIO CONTROL ================= */
   useEffect(() => {
@@ -821,6 +873,11 @@ export default function Page() {
 
       const stream = streams.find(s => s.channelId === id)
       if (!stream) return
+
+      if (!activePlayerSet.has(id)) {
+        safeApplyAudio(player, 0, true)
+        return
+      }
 
       if (!stream.enabled) {
         safeApplyAudio(player, 0, true)
@@ -842,7 +899,7 @@ export default function Page() {
         !isMain && audioMode === "mute"
       )
     })
-  }, [streamPlaybackSignature, focusedId, audioMode, unfocusedVolume, masterVolume])
+  }, [streamPlaybackSignature, activePlayerSet, focusedId, audioMode, unfocusedVolume, masterVolume])
 
   function safeApplyAudio(
     player: any,
@@ -1096,10 +1153,7 @@ export default function Page() {
     setCustomStreams(filterStreams)
     setStreams(filterStreams)
 
-    if (players.current[id]) {
-      players.current[id].destroy()
-      delete players.current[id]
-    }
+    safeDestroyPlayer(id)
 
     if (focusedId === id) {
       setFocusedId(null)
@@ -1480,6 +1534,7 @@ export default function Page() {
           {renderStreams.map(s => {
             const cell = positions.get(`video-${s.channelId}`)
             const isFocused = s.channelId === focusedId
+            const isActive = activePlayerSet.has(s.channelId)
             return (
               <div
                 key={s.channelId}
@@ -1487,7 +1542,26 @@ export default function Page() {
                 style={layout.mode === "theater" && cell ? getGridStyle(cell) : getGridStyle(cell)}
               >
                 <div className="video-wrap">
-                  <PlayerHost channelId={s.channelId} />
+                  <div style={{ opacity: isActive ? 1 : 0, pointerEvents: isActive ? "auto" : "none" }}>
+                    <PlayerHost channelId={s.channelId} />
+                  </div>
+                  {!isActive && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        display: "grid",
+                        placeItems: "center",
+                        background: "rgba(0,0,0,0.55)",
+                        color: "var(--muted)",
+                        fontSize: 12,
+                        textAlign: "center",
+                        padding: 12,
+                      }}
+                    >
+                      Loading...
+                    </div>
+                  )}
                 </div>
                 <button
                   className={`stream-label ${isFocused ? "active" : ""}`}
@@ -1569,6 +1643,9 @@ export default function Page() {
                 const s = streamMap.get(cell.channelId)
                 if (!s) return <div key={`empty-chat-${i}`} />
                 const pos = positions.get(`chat-${cell.channelId}`)
+                if (!activePlayerSet.has(s.channelId)) {
+                  return <div key={`chat-placeholder-${cell.channelId}`} className="chat-card" style={getGridStyle(pos)} />
+                }
                 return (
                   <div
                     key={`chat-${cell.channelId}`}
@@ -1596,7 +1673,7 @@ export default function Page() {
                     style={getGridStyle(pos)}
                   >
                     <div className="chat-card" aria-hidden={!sA}>
-                      {sA ? (
+                      {sA && activePlayerSet.has(sA.channelId) ? (
                         <iframe
                           src={buildChatUrl(sA.liveVideoId!)}
                           title={`chat-${sA.channelId}`}
@@ -1606,7 +1683,7 @@ export default function Page() {
                     </div>
 
                     <div className="chat-card" aria-hidden={!sB}>
-                      {sB ? (
+                      {sB && activePlayerSet.has(sB.channelId) ? (
                         <iframe
                           src={buildChatUrl(sB.liveVideoId!)}
                           title={`chat-${sB.channelId}`}
@@ -1652,26 +1729,17 @@ export default function Page() {
                     if (s.channelId.startsWith("custom-")) {
                       setCustomStreams(prev => prev.map(p => p.channelId === s.channelId ? { ...p, enabled: !p.enabled } : p))
                     }
+                    if (nextEnabled) {
+                      setRampedActivePlayerIds(prev => [
+                        s.channelId,
+                        ...prev.filter(id => id !== s.channelId),
+                      ])
+                    } else {
+                      safeDestroyPlayer(s.channelId)
+                    }
                     if (focusedId === s.channelId) {
                       setFocusedId(null)
                     }
-
-                    requestAnimationFrame(() => {
-                      const player = players.current[s.channelId]
-                      if (!player) return
-
-                      if (nextEnabled) {
-                        try {
-                          player.unMute?.()
-                          player.setVolume?.(audioValues.current.masterVolume)
-                          player.playVideo?.()
-                        } catch { }
-                      } else {
-                        try {
-                          player.mute?.()
-                        } catch { }
-                      }
-                    })
                   }}
                 >
                   <span className="dot" />{s.name}
