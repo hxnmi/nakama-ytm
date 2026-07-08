@@ -531,26 +531,28 @@ body {
 
 .toggle-pill.live.enabled,
 .toggle-pill.waiting.enabled,
-.toggle-pill.scheduled.enabled {
+.toggle-pill.scheduled.enabled,
+.toggle-pill.offline.enabled {
   background: var(--bg);
   color: var(--text);
 }
 
 .toggle-pill.live.disabled,
 .toggle-pill.waiting.disabled,
-.toggle-pill.scheduled.disabled {
+.toggle-pill.scheduled.disabled,
+.toggle-pill.offline.disabled {
   background: var(--panel);
   color: #777;
   opacity: 0.6;
   border: none;
 }
 
-.toggle-pill.offline {
+/* .toggle-pill.offline {
   background: var(--panel);
   color: #777;
   opacity: 0.6;
   border: none;
-}
+} */
 
 .toggle-pill .dot {
   width: 6px;

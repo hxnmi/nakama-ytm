@@ -96,30 +96,42 @@ async function setAllStates(states: ChannelStateMap) {
 
 
 /* ================= RSS ================= */
-async function fetchRssVideoIds(
+async function fetchRssFeed(
     channelId: string,
     limit: number
-): Promise<string[]> {
+): Promise<{
+    videoIds: string[]
+    channelName?: string
+}> {
     const res = await fetch(
         `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`,
         { cache: "no-store" }
     )
-    if (!res.ok) return []
+    if (!res.ok) return { videoIds: [] }
 
     const xml = await res.text()
     const parser = new XMLParser()
     const json = parser.parse(xml)
 
     const entries = json.feed?.entry
-    if (!entries) return []
+    const arr = entries
+        ? (Array.isArray(entries) ? entries : [entries])
+        : []
 
-    const arr = Array.isArray(entries) ? entries : [entries]
-    return arr.slice(0, limit).map((e: any) => e["yt:videoId"]).filter(Boolean)
+    return {
+        videoIds: arr
+            .slice(0, limit)
+            .map((e: any) => e["yt:videoId"])
+            .filter(Boolean),
+
+        channelName: json.feed?.author?.name,
+    }
 }
 
 /* ================= CORE ================= */
 async function fetchLiveStatus(): Promise<Streamer[]> {
     const STREAMERS = await getStreamers()
+    const nameUpdates = new Map<string, string>()
     const stateMap = await getAllStates()
     const channelCandidates = new Map<string, string[]>()
     const now = Date.now()
@@ -143,7 +155,13 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
                 : [3]
 
         for (const depth of depths) {
-            const vids = await fetchRssVideoIds(s.channelId, depth)
+            const rss = await fetchRssFeed(s.channelId, depth)
+            const vids = rss.videoIds
+
+            if (rss.channelName && rss.channelName !== s.name) {
+                s.name = rss.channelName
+                nameUpdates.set(s.channelId, rss.channelName)
+            }
 
             if (vids.length) {
                 channelCandidates.set(s.channelId, vids)
@@ -206,6 +224,7 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
         if (info?.status === "live" && hit) {
             status = "live"
             stateMap[s.channelId] = {
+                ...state,
                 offlinePolls: 0,
                 lastActiveAt: Date.now(),
                 lastKnownVideoId: hit
@@ -214,6 +233,7 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
         } else if (info?.status === "scheduled") {
             status = hit ? "waiting" : "scheduled"
             stateMap[s.channelId] = {
+                ...state,
                 offlinePolls: 0,
                 lastActiveAt: Date.now(),
                 lastKnownVideoId: hit
@@ -263,6 +283,25 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
         }
     })
 
+    try {
+        if (nameUpdates.size > 0) {
+            const config = await kv.get<{ streamers: StreamerConfig[] }>("streamers:config")
+
+            if (config) {
+                config.streamers = config.streamers.map(streamer => {
+                    const newName = nameUpdates.get(streamer.channelId)
+
+                    return newName
+                        ? { ...streamer, name: newName }
+                        : streamer
+                })
+
+                await kv.set("streamers:config", config)
+            }
+        }
+    } catch (err) {
+        console.error("Failed to update streamer names:", err)
+    }
     if (stateDirty) {
         await setAllStates(stateMap)
     }

@@ -145,9 +145,16 @@ export default function Page() {
 
   /* ================= COMPUTED ================= */
   const visibleStreams = useMemo(() => {
-    const filtered = streams.filter(
-      s => s.enabled && s.liveVideoId && s.status !== "offline"
-    )
+    // const filtered = streams.filter(s => s.enabled && s.liveVideoId && s.status !== "offline")
+    const filtered = streams.filter(s => {
+      if (s.enabled) {
+        return true;
+      }
+      if (s.enabled && s.status === "offline" && showOffline) {
+        return true;
+      }
+      return false;
+    });
 
     const orderIndex = (channelId: string) => {
       const index = order.indexOf(channelId)
@@ -159,7 +166,7 @@ export default function Page() {
       if (orderDiff !== 0) return orderDiff
       return (STATUS_PRIORITY[a.status] ?? 4) - (STATUS_PRIORITY[b.status] ?? 4)
     })
-  }, [streams, order])
+  }, [streams, order, showOffline])
 
   const streamMap = useMemo(
     () => new Map(visibleStreams.map(s => [s.channelId, s])),
@@ -172,11 +179,13 @@ export default function Page() {
   )
 
   const canClipFocusedStream = Boolean(
-    focusedStream && focusedStream.status !== "offline" && focusedStream.liveVideoId
+    // focusedStream && focusedStream.status !== "offline" && focusedStream.liveVideoId
+    focusedStream && focusedStream.liveVideoId
   )
 
   const renderStreams = useMemo(
-    () => streams.filter(s => s.liveVideoId && s.status !== "offline"),
+    // () => streams.filter(s => s.liveVideoId && s.status !== "offline"),
+    () => streams.filter(s => s.liveVideoId),
     [streams]
   )
 
@@ -711,8 +720,9 @@ export default function Page() {
             }
 
             lastStatusRef.current[r.channelId] = r.status
-            const playable = r.status !== "offline" && !!r.liveVideoId
-            return { ...existing, ...r, liveVideoId: playable ? r.liveVideoId : undefined, enabled: existing?.enabled ?? false }
+            // const playable = r.status !== "offline" && !!r.liveVideoId
+            // return { ...existing, ...r, liveVideoId: playable ? r.liveVideoId : undefined, enabled: existing?.enabled ?? false }
+            return { ...existing, ...r, enabled: existing?.enabled ?? false }
           })
           const custom = prev.filter(p =>
             p.channelId.startsWith("custom-")
@@ -794,7 +804,8 @@ export default function Page() {
 
     streams.forEach((s: Streamer) => {
       if (!activePlayerSet.has(s.channelId)) return
-      if (!s.liveVideoId || s.status === "offline") return
+      // if (!s.liveVideoId || s.status === "offline") return
+      if (!s.liveVideoId) return
 
       const id = s.channelId
       const el = document.getElementById(`player-${id}`)
@@ -1987,7 +1998,7 @@ export default function Page() {
                   key={s.channelId}
                   className={`toggle-pill ${s.status} ${s.enabled ? "enabled" : "disabled"}`}
                   onClick={() => {
-                    if (s.status === "offline") return
+                    // if (s.status === "offline") return
                     const nextEnabled = !s.enabled
 
                     setStreams(prev => prev.map(p => p.channelId === s.channelId ? { ...p, enabled: !p.enabled } : p))
