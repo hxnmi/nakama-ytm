@@ -34,6 +34,11 @@ type HashtagResult = {
   viewerCount?: number
 }
 
+type ClipChunk = {
+  blob: Blob
+  timestamp: number
+}
+
 declare global {
   interface Window {
     YT: any
@@ -121,7 +126,18 @@ export default function Page() {
   const [hashtagResults, setHashtagResults] = useState<HashtagResult[]>([])
   const [hashtagLoading, setHashtagLoading] = useState(false)
 
+  const [clipMenuOpen, setClipMenuOpen] = useState(false)
+  const [clipLengthMinutes, setClipLengthMinutes] = useState(3)
+  const [clipStatus, setClipStatus] = useState<string | null>(null)
+  const [clipError, setClipError] = useState<string | null>(null)
+
   const [viewport, setViewport] = useState({ w: 0 })
+
+  const clipStreamRef = useRef<MediaStream | null>(null)
+  const clipRecorderRef = useRef<MediaRecorder | null>(null)
+  const clipChunksRef = useRef<ClipChunk[]>([])
+  const clipFocusedIdRef = useRef<string | null>(null)
+  const clipMimeTypeRef = useRef<string | null>(null)
 
   const isMobile = viewport.w <= 768
   const isVerySmall = viewport.w < 500
@@ -148,6 +164,15 @@ export default function Page() {
   const streamMap = useMemo(
     () => new Map(visibleStreams.map(s => [s.channelId, s])),
     [visibleStreams]
+  )
+
+  const focusedStream = useMemo(
+    () => streams.find(s => s.channelId === focusedId) ?? null,
+    [streams, focusedId]
+  )
+
+  const canClipFocusedStream = Boolean(
+    focusedStream && focusedStream.status !== "offline" && focusedStream.liveVideoId
   )
 
   const renderStreams = useMemo(
@@ -841,6 +866,164 @@ export default function Page() {
     delete players.current[id]
   }
 
+  function pickClipMimeType() {
+    const candidates = [
+      "video/webm;codecs=vp9,opus",
+      "video/webm;codecs=vp8,opus",
+      "video/webm",
+    ]
+
+    for (const type of candidates) {
+      if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(type)) {
+        return type
+      }
+    }
+
+    return ""
+  }
+
+  function stopClipBuffer() {
+    const recorder = clipRecorderRef.current
+    clipRecorderRef.current = null
+    clipFocusedIdRef.current = null
+    setClipStatus(null)
+
+    if (recorder && recorder.state !== "inactive") {
+      try {
+        recorder.stop()
+      } catch { }
+    }
+
+    const stream = clipStreamRef.current
+    clipStreamRef.current = null
+
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop())
+    }
+  }
+
+  async function startClipBuffer() {
+    if (!canClipFocusedStream || !focusedId) {
+      setClipError("Select a live stream first.")
+      return false
+    }
+
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      setClipError("This browser does not support screen capture.")
+      return false
+    }
+
+    if (clipRecorderRef.current?.state === "recording") {
+      clipFocusedIdRef.current = focusedId
+      return true
+    }
+
+    try {
+      setClipError(null)
+      setClipStatus("Waiting for screen-share permission...")
+
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: true,
+      })
+
+      if (!stream.getVideoTracks().length) {
+        stream.getTracks().forEach(track => track.stop())
+        setClipStatus(null)
+        setClipError("No video track was returned.")
+        return false
+      }
+
+      const mimeType = pickClipMimeType()
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+
+      clipStreamRef.current = stream
+      clipRecorderRef.current = recorder
+      clipFocusedIdRef.current = focusedId
+      clipMimeTypeRef.current = mimeType || "video/webm"
+      clipChunksRef.current = []
+
+      recorder.ondataavailable = event => {
+        if (!event.data || event.data.size === 0) return
+
+        const timestamp = Date.now()
+        clipChunksRef.current.push({ blob: event.data, timestamp })
+
+        const maxWindowMs = 6 * 60 * 1000
+        const cutoff = timestamp - maxWindowMs
+        clipChunksRef.current = clipChunksRef.current.filter(chunk => chunk.timestamp >= cutoff)
+      }
+
+      recorder.onerror = () => {
+        setClipError("Recording stopped unexpectedly.")
+        setClipStatus(null)
+        stopClipBuffer()
+      }
+
+      stream.getVideoTracks()[0].onended = () => {
+        setClipStatus(null)
+        stopClipBuffer()
+      }
+
+      recorder.start(2000)
+      setClipStatus("Buffering the last few minutes in your browser.")
+      return true
+    } catch (error: any) {
+      setClipStatus(null)
+      setClipError(error?.name === "NotAllowedError"
+        ? "Screen capture permission was cancelled."
+        : error?.message || "Unable to start clip buffering.")
+      stopClipBuffer()
+      return false
+    }
+  }
+
+  async function saveClip() {
+    if (!focusedStream || !focusedId) {
+      setClipError("Select a live stream first.")
+      return
+    }
+
+    if (clipFocusedIdRef.current !== focusedId) {
+      setClipError("Clip buffer belongs to a different focused stream.")
+      return
+    }
+
+    if (clipRecorderRef.current?.state !== "recording") {
+      const started = await startClipBuffer()
+      if (!started) return
+      setClipError("Buffer is still warming up. Try saving again in a few seconds.")
+      return
+    }
+
+    const cutoff = Date.now() - clipLengthMinutes * 60 * 1000
+    const chunks = clipChunksRef.current.filter(chunk => chunk.timestamp >= cutoff)
+
+    if (chunks.length === 0) {
+      setClipError("Not enough buffered video yet.")
+      return
+    }
+
+    const mimeType = clipRecorderRef.current?.mimeType || clipMimeTypeRef.current || "video/webm"
+    const blob = new Blob(chunks.map(chunk => chunk.blob), { type: mimeType })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    const safeName = focusedStream.name.replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "_") || "clip"
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-")
+
+    a.href = url
+    a.download = `${safeName}_${clipLengthMinutes}m_${stamp}.webm`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+
+    setClipStatus(`Saved the last ${clipLengthMinutes} minute${clipLengthMinutes === 1 ? "" : "s"}.`)
+
+    window.setTimeout(() => {
+      URL.revokeObjectURL(url)
+    }, 1000)
+  }
+
   useEffect(() => {
     streams.forEach((s: Streamer) => {
       if (s.enabled || activePlayerSet.has(s.channelId)) return
@@ -1273,10 +1456,34 @@ export default function Page() {
     )
   }, [focusedId])
 
+  useEffect(() => {
+    if (!focusedId) {
+      if (clipRecorderRef.current) {
+        stopClipBuffer()
+      }
+      setClipMenuOpen(false)
+      return
+    }
+
+    if (!focusedStream || focusedStream.status === "offline" || !focusedStream.liveVideoId) {
+      if (clipRecorderRef.current) {
+        stopClipBuffer()
+      }
+      setClipMenuOpen(false)
+      return
+    }
+
+    if (clipFocusedIdRef.current && clipFocusedIdRef.current !== focusedId) {
+      stopClipBuffer()
+      setClipMenuOpen(false)
+    }
+  }, [focusedId, focusedStream])
+
   /* ================= RENDER ================= */
   if (!mounted) {
     return <div className="app theme-dark" />
   }
+
   return (
     <div className={`app theme-${theme}`}>
       <header className="header">
@@ -1329,7 +1536,8 @@ export default function Page() {
             onClick={() => setShowHashtagPanel(prev => !prev)}
             title="Discover streams with #imeroleplay"
           >
-            🔍 #imeroleplay
+            <span aria-hidden="true">🔍</span>
+            <span className="hashtag-btn-text"> #imeroleplay</span>
           </button>
         </div>
         <div className="header-right">
@@ -1400,6 +1608,50 @@ export default function Page() {
           >
             💬 Chat
           </button>
+          {!isMobile && canClipFocusedStream && (
+            <div className="clip-control">
+              <button
+                className={`ui-btn clip-toggle ${clipRecorderRef.current?.state === "recording" ? "enabled" : ""}`}
+                onClick={async () => {
+                  setClipMenuOpen(prev => !prev)
+                  if (clipRecorderRef.current?.state !== "recording") {
+                    await startClipBuffer()
+                  }
+                }}
+                title="Clip the focused live stream"
+              >
+                ✂ Clip
+              </button>
+
+              {clipMenuOpen && (
+                <div className="clip-popover" role="dialog" aria-label="Clip focused stream">
+                  <label>
+                    Length
+                    <select
+                      value={clipLengthMinutes}
+                      onChange={(e) => setClipLengthMinutes(Number(e.target.value))}
+                    >
+                      {[1, 2, 3, 4, 5].map(minute => (
+                        <option key={minute} value={minute}>
+                          {minute} minute{minute === 1 ? "" : "s"}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <button className="ui-btn clip-save" onClick={saveClip}>
+                    Save clip
+                  </button>
+
+                  <div className="clip-hint">
+                    {clipStatus ?? "Capturing the focused stream in your browser."}
+                  </div>
+
+                  {clipError && <div className="clip-error">{clipError}</div>}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </header>
 
