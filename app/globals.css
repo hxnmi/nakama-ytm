@@ -459,6 +459,12 @@ body {
   color: var(--text);
 }
 
+.ui-btn.cls-btn {
+  font-size: 9px;
+  padding: 0 6px;
+  height: 20px;
+}
+
 /* ================= FOOTER (UNCHANGED LOGIC) ================= */
 .offline-bar {
   position: fixed;
@@ -966,7 +972,7 @@ select {
   }
 }
 
-@media (min-width: 1024px) and (max-width: 1280px) {
+@media (min-width: 900px) and (max-width: 1280px) {
   .desktop-controls {
     flex: 1 1 auto;
     justify-content: flex-end;
@@ -1074,7 +1080,7 @@ select {
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 900px) {
   .hashtag-btn {
     display: none !important;
   }

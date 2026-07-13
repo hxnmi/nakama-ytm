@@ -812,16 +812,19 @@ export default function Page() {
       if (!el) return
 
       const existingPlayer = players.current[id]
-      const iframe = existingPlayer?.getIframe?.()
+      // const iframe = existingPlayer?.getIframe?.()
 
-      if (existingPlayer && iframe?.isConnected) return
+      // if (existingPlayer && iframe?.isConnected) return
 
+      // if (existingPlayer) {
+      //   try {
+      //     existingPlayer.stopVideo?.()
+      //     existingPlayer.mute?.()
+      //   } catch { }
+      //   delete players.current[id]
+      // }
       if (existingPlayer) {
-        try {
-          existingPlayer.stopVideo?.()
-          existingPlayer.mute?.()
-        } catch { }
-        delete players.current[id]
+        return
       }
 
       players.current[id] = new window.YT.Player(el, {
@@ -870,8 +873,8 @@ export default function Page() {
     } catch { }
 
     try {
-      player.stopVideo?.()
       player.mute?.()
+      player.playVideo?.()
     } catch { }
 
     delete players.current[id]
@@ -1066,12 +1069,13 @@ export default function Page() {
   }
 
   useEffect(() => {
+  const validIds = new Set(streams.map(s => s.channelId));
     Object.keys(players.current).forEach(id => {
-      if (!activePlayerSet.has(id)) {
+      if (!validIds.has(id)) {
         safeDestroyPlayer(id)
       }
     })
-  }, [streamPlaybackSignature, activePlayerSet])
+  }, [streams]);
 
   /* ================= AUDIO CONTROL ================= */
   useEffect(() => {
@@ -1458,13 +1462,13 @@ export default function Page() {
   useEffect(() => {
     if (!focusedId) return
 
-    setStreams(prev =>
-      prev.map(s =>
+    setStreams(prev => {
+      return prev.map(s =>
         s.channelId === focusedId && !s.enabled
           ? { ...s, enabled: true }
           : s
       )
-    )
+    })
   }, [focusedId])
 
   useEffect(() => {
@@ -1986,6 +1990,19 @@ export default function Page() {
             {n.message}
           </div>
         ))}
+        <button
+          className="ui-btn cls-btn"
+          onClick={() => {
+            // Disable all streams (including custom ones)
+            setStreams(prev => prev.map(s => ({ ...s, enabled: false })));
+            setCustomStreams(prev => prev.map(s => ({ ...s, enabled: false })));
+            setFocusedId(null);
+            setRampedActivePlayerIds([]);
+          }}
+          style={{ marginLeft: "1rem", background: "#e11d48", color: "white" }}
+        >
+          CLS
+        </button>
       </div>
 
       <footer className="offline-bar">
@@ -1999,38 +2016,38 @@ export default function Page() {
                   className={`toggle-pill ${s.status} ${s.enabled ? "enabled" : "disabled"}`}
                   onClick={() => {
                     // if (s.status === "offline") return
-                    const nextEnabled = !s.enabled
-
-                    setStreams(prev => prev.map(p => p.channelId === s.channelId ? { ...p, enabled: !p.enabled } : p))
+                    const nextEnabled = !s.enabled;
+                    setStreams(prev => prev.map(p => p.channelId === s.channelId ? { ...p, enabled: nextEnabled } : p));
                     if (s.channelId.startsWith("custom-")) {
-                      setCustomStreams(prev => prev.map(p => p.channelId === s.channelId ? { ...p, enabled: !p.enabled } : p))
+                      setCustomStreams(prev => prev.map(p => p.channelId === s.channelId ? { ...p, enabled: nextEnabled } : p));
                     }
                     if (nextEnabled) {
                       setRampedActivePlayerIds(prev => [
                         s.channelId,
                         ...prev.filter(id => id !== s.channelId),
-                      ])
+                      ]);
                     } else {
-                      safeDestroyPlayer(s.channelId)
-                    }
-                    if (focusedId === s.channelId) {
-                      setFocusedId(null)
-                    }
-                    requestAnimationFrame(() => {
-                      const player = players.current[s.channelId]
-                      if (!player) return
+                      const player = players.current[s.channelId];
 
-                      if (nextEnabled) {
+                      if (player) {
                         try {
-                          player.unMute?.()
-                          player.setVolume?.(audioValues.current.masterVolume)
-                        } catch { }
-                      } else {
-                        try {
-                          player.mute?.()
+                          player.mute?.();
+                          player.playVideo?.();
                         } catch { }
                       }
-                    })
+                    }
+                    if (focusedId === s.channelId) {
+                      setFocusedId(null);
+                    }
+                    requestAnimationFrame(() => {
+                      const player = players.current[s.channelId];
+                      if (!player) return;
+                      if (nextEnabled) {
+                        try { player.unMute?.(); player.setVolume?.(audioValues.current.masterVolume); } catch { }
+                      } else {
+                        try { player.mute?.(); } catch { }
+                      }
+                    });
                   }}
                 >
                   <span className="dot" />{s.name}
