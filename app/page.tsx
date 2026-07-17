@@ -10,6 +10,7 @@ type Streamer = {
   status: StreamStatus
   liveVideoId?: string
   concurrentViewers?: number
+  order?: number
   enabled: boolean
   groups: string[]
 }
@@ -38,6 +39,16 @@ type ClipChunk = {
   blob: Blob
   timestamp: number
 }
+
+type TutorialStep = {
+  target: string;
+  title: string;
+  text: string;
+  placement: | "top" | "top-right" | "right" | "bottom-right" | "bottom" | "bottom-left" | "left" | "top-left";
+  offsetX?: number;
+  offsetY?: number;
+  beforeShow?: () => void;
+};
 
 declare global {
   interface Window {
@@ -88,6 +99,7 @@ export default function Page() {
     unfocusedVolume: 30,
     audioMode: "mute"
   })
+  const boxRef = useRef<HTMLDivElement>(null);
 
   const [isClient, setIsClient] = useState(false)
   const [ytReady, setYtReady] = useState(false)
@@ -130,6 +142,9 @@ export default function Page() {
   const [clipLengthMinutes, setClipLengthMinutes] = useState(3)
   const [clipStatus, setClipStatus] = useState<string | null>(null)
   const [clipError, setClipError] = useState<string | null>(null)
+
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [step, setStep] = useState(0);
 
   const [viewport, setViewport] = useState({ w: 0 })
 
@@ -812,17 +827,6 @@ export default function Page() {
       if (!el) return
 
       const existingPlayer = players.current[id]
-      // const iframe = existingPlayer?.getIframe?.()
-
-      // if (existingPlayer && iframe?.isConnected) return
-
-      // if (existingPlayer) {
-      //   try {
-      //     existingPlayer.stopVideo?.()
-      //     existingPlayer.mute?.()
-      //   } catch { }
-      //   delete players.current[id]
-      // }
       if (existingPlayer) {
         return
       }
@@ -880,6 +884,46 @@ export default function Page() {
     delete players.current[id]
   }
 
+  useEffect(() => {
+    streams.forEach((s: Streamer) => {
+      if (s.enabled || activePlayerSet.has(s.channelId)) return
+
+      const player = players.current[s.channelId]
+      if (!player) return
+
+      try {
+        player.mute?.()
+      } catch { }
+    })
+  }, [streams, activePlayerSet])
+
+  function extractYouTubeVideoId(url: string): string | null {
+    try {
+      const u = new URL(url)
+
+      if (u.hostname.includes("youtu.be")) {
+        return u.pathname.replace("/", "")
+      }
+      if (u.searchParams.has("v")) {
+        return u.searchParams.get("v")
+      }
+
+      return null
+    } catch {
+      return null
+    }
+  }
+
+  useEffect(() => {
+    const validIds = new Set(streams.map(s => s.channelId));
+    Object.keys(players.current).forEach(id => {
+      if (!validIds.has(id)) {
+        safeDestroyPlayer(id)
+      }
+    })
+  }, [streams]);
+
+  /* ================= CLIP BUFFER ================= */
   function pickClipMimeType() {
     const candidates = [
       "video/webm;codecs=vp9,opus",
@@ -1038,45 +1082,6 @@ export default function Page() {
     }, 1000)
   }
 
-  useEffect(() => {
-    streams.forEach((s: Streamer) => {
-      if (s.enabled || activePlayerSet.has(s.channelId)) return
-
-      const player = players.current[s.channelId]
-      if (!player) return
-
-      try {
-        player.mute?.()
-      } catch { }
-    })
-  }, [streams, activePlayerSet])
-
-  function extractYouTubeVideoId(url: string): string | null {
-    try {
-      const u = new URL(url)
-
-      if (u.hostname.includes("youtu.be")) {
-        return u.pathname.replace("/", "")
-      }
-      if (u.searchParams.has("v")) {
-        return u.searchParams.get("v")
-      }
-
-      return null
-    } catch {
-      return null
-    }
-  }
-
-  useEffect(() => {
-  const validIds = new Set(streams.map(s => s.channelId));
-    Object.keys(players.current).forEach(id => {
-      if (!validIds.has(id)) {
-        safeDestroyPlayer(id)
-      }
-    })
-  }, [streams]);
-
   /* ================= AUDIO CONTROL ================= */
   useEffect(() => {
     Object.entries(players.current).forEach(([id, player]) => {
@@ -1179,7 +1184,7 @@ export default function Page() {
       streams: groupStreams
         .filter(s => showOffline || s.status !== "offline")
         .sort((a, b) => {
-          const orderDiff = order.indexOf(a.channelId) - order.indexOf(b.channelId)
+          const orderDiff = (a.order ?? 9999) - (b.order ?? 9999)
           if (orderDiff !== 0) return orderDiff
 
           const statusDiff = STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status]
@@ -1189,7 +1194,7 @@ export default function Page() {
           const bIsEX = b.groups.includes("EX")
           if (aIsEX !== bIsEX) return aIsEX ? 1 : -1
 
-          return 0
+          return a.name.localeCompare(b.name)
         }),
     }))
   }, [streams, showOffline, order])
@@ -1458,6 +1463,248 @@ export default function Page() {
     return () => window.removeEventListener("resize", update)
   }, [])
 
+  //TUTORIAL/GUIDE
+  const tutorialSteps: TutorialStep[] = [
+    {
+      target: ".theme-btn",
+      title: "Theme",
+      text: "Switch between Dark and Light mode theme.",
+      placement: "bottom-left"
+    },
+    {
+      target: ".stream-input-combo",
+      title: "Custom Youtube Video",
+      text: "Paste any YouTube video link here. It can be a livestream or a regular video. It will be added to the list of dropdown options.",
+      placement: "bottom-left",
+    },
+    {
+      target: ".hashtag-btn",
+      title: "#imeroleplay",
+      text: "Discover livestreams using the hashtag.",
+      placement: "bottom-left",
+    },
+    {
+      target: ".theater-btn",
+      title: "Modes",
+      text: "Theater mode expands one of the video to a widescreen format. Default mode retains a standard layout.",
+      placement: "bottom-left",
+    },
+    {
+      target: ".volume-group",
+      title: "Global volume controls",
+      text: "Global audio setting. It allows you to adjust the volume of all active, simultaneously running sources at the same time using a single master slider.",
+      placement: "bottom-right",
+    },
+    {
+      target: ".group-streams",
+      title: "Streamer toggles",
+      text: "Enable or disable streamers here.",
+      offsetY: 55,
+      placement: "top-left",
+    },
+    {
+      target: ".stream-label.active", //need users to toggle focused
+      title: "Youtuber Name Label",
+      text: "Click this toggle button to isolate a single source. Locks the audio exclusively to that source, and unlock clip or exit focus at any time.",
+      placement: "top-left",
+      offsetY: -5,
+      beforeShow: () => {
+        if (focusedId) return;
+
+        const first = streams.find(s => s.enabled) ?? streams[0];
+
+        if (!first) return;
+
+        if (!first.enabled) {
+          setStreams(prev =>
+            prev.map(s => ({
+              ...s,
+              enabled: s.channelId === first.channelId,
+            }))
+          );
+        }
+
+        setFocusedId(first.channelId);
+      }
+    },
+    {
+      target: ".audio-focus-controls", //need users to toggle focused
+      title: "Audio Focus Controls",
+      text: "Audio focus mixing controls for focused sources. It activates when a specific user or audio source is highlighted/focused.",
+      placement: "bottom-right",
+    },
+    {
+      target: ".clip-toggle", //need users to toggle focused
+      title: "Clip Toggle",
+      text: "A clip toggle allows you to record your screen and save short highlights of your favorite moments.",
+      placement: "bottom-right",
+    },
+  ]
+
+  const closeTutorial = () => {
+    setTutorialOpen(false);
+    setStep(0);
+  };
+
+  const next = () => {
+    if (step === tutorialSteps.length - 1) {
+      closeTutorial();
+    } else {
+      setStep(step + 1);
+    }
+  };
+
+  function TutorialOverlay({
+    step,
+  }: {
+    step: TutorialStep;
+  }) {
+    const [rect, setRect] = useState<DOMRect | null>(null);
+
+    useEffect(() => {
+      step.beforeShow?.();
+
+      const updatePosition = () => {
+        const element = document.querySelector(step.target);
+
+        if (!element) {
+          setRect(null);
+          return;
+        }
+
+        element.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+
+        setRect(element.getBoundingClientRect());
+      };
+
+      const waitForTarget = () => {
+        const element = document.querySelector(step.target);
+
+        if (element) {
+          updatePosition();
+        } else {
+          requestAnimationFrame(waitForTarget);
+        }
+      };
+
+      requestAnimationFrame(waitForTarget);
+
+      window.addEventListener("resize", updatePosition);
+      window.addEventListener("scroll", updatePosition, true);
+
+      return () => {
+        window.removeEventListener("resize", updatePosition);
+        window.removeEventListener("scroll", updatePosition, true);
+      };
+    }, [step.target]);
+
+    if (!rect) return null;
+
+
+    const BOX_WIDTH = boxRef.current?.offsetWidth ?? 320;
+    const BOX_HEIGHT = boxRef.current?.offsetHeight ?? 180;
+    const GAP = 18;
+    const PAD = 12;
+
+    const isMobile = window.innerWidth < 768;
+
+    let left = rect.left;
+    let top = rect.bottom + GAP;
+
+    if (!isMobile) {
+      switch (step.placement) {
+
+        case "top":
+          left = rect.left + rect.width / 2 - BOX_WIDTH / 2;
+          top = rect.top - BOX_HEIGHT - GAP;
+          break;
+
+        case "top-left":
+          left = rect.left;
+          top = rect.top - BOX_HEIGHT - GAP;
+          break;
+
+        case "top-right":
+          left = rect.right - BOX_WIDTH;
+          top = rect.top - BOX_HEIGHT - GAP;
+          break;
+
+        case "bottom":
+          left = rect.left + rect.width / 2 - BOX_WIDTH / 2;
+          top = rect.bottom + GAP;
+          break;
+
+        case "bottom-left":
+          left = rect.left;
+          top = rect.bottom + GAP;
+          break;
+
+        case "bottom-right":
+          left = rect.right - BOX_WIDTH;
+          top = rect.bottom + GAP;
+          break;
+
+        case "left":
+          left = rect.left - BOX_WIDTH - GAP;
+          top = rect.top + rect.height / 2 - BOX_HEIGHT / 2;
+          break;
+
+        case "right":
+          left = rect.right + GAP;
+          top = rect.top + rect.height / 2 - BOX_HEIGHT / 2;
+          break;
+      }
+
+      left += step.offsetX ?? 0;
+      top += step.offsetY ?? 0;
+
+      left = Math.max(
+        PAD,
+        Math.min(left, window.innerWidth - BOX_WIDTH - PAD)
+      );
+
+      top = Math.max(
+        PAD,
+        Math.min(top, window.innerHeight - BOX_HEIGHT - PAD)
+      );
+    } else {
+      left = PAD;
+      top = window.innerHeight - BOX_HEIGHT - PAD;
+    }
+
+    return (
+      <>
+        <div
+          className="tutorial-highlight"
+          style={{
+            left: rect.left - 6,
+            top: rect.top - 6,
+            width: rect.width + 12,
+            height: rect.height + 12,
+          }}
+        />
+
+        <div
+          ref={boxRef}
+          className="tutorial-box"
+          style={{
+            left,
+            top,
+          }}
+        >
+          <h3>{step.title}</h3>
+          <hr />
+          <p>{step.text}</p>
+          <br></br>
+          <small>Click anywhere to continue</small>
+        </div>
+      </>
+    );
+  }
+
   /* ================= LOAD CACHE ================= */
   useEffect(() => {
     if (!focusedId) return
@@ -1529,7 +1776,7 @@ export default function Page() {
             )}
           </span>
           <button
-            className="ui-btn"
+            className="ui-btn theme-btn"
             onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}
           >
             {theme === "dark" ? "🌙 Dark" : "🌞 Light"}
@@ -1566,7 +1813,8 @@ export default function Page() {
           </button>
           <div className="desktop-controls">
             <button
-              className="ui-btn" style={{ display: "flex", alignItems: "center", gap: 8 }}
+              className="ui-btn theater-btn"
+              style={{ display: "flex", alignItems: "center", gap: 8 }}
               onClick={() => {
                 setTheater(prev => !prev)
               }}
@@ -1617,7 +1865,7 @@ export default function Page() {
             </button>
           </div>
           <button
-            className="ui-btn"
+            className="ui-btn chat-btn"
             onClick={() => setShowChat(v => !v)}
             disabled={visibleStreams.length === 0}
           >
@@ -1990,16 +2238,32 @@ export default function Page() {
             {n.message}
           </div>
         ))}
+      </div>
+      <div className="toolbar">
+        {tutorialOpen && (
+          <div className="tutorial-overlay" onClick={next}>
+            <TutorialOverlay
+              step={tutorialSteps[step]}
+            />
+          </div>
+        )}
+        <button
+          className="ui-btn tutorial-btn"
+          onClick={() => {
+            setTutorialOpen(true);
+            setStep(0);
+          }}
+        >
+          ⓘ how to use
+        </button>
         <button
           className="ui-btn cls-btn"
           onClick={() => {
-            // Disable all streams (including custom ones)
             setStreams(prev => prev.map(s => ({ ...s, enabled: false })));
             setCustomStreams(prev => prev.map(s => ({ ...s, enabled: false })));
             setFocusedId(null);
             setRampedActivePlayerIds([]);
           }}
-          style={{ marginLeft: "1rem", background: "#e11d48", color: "white" }}
         >
           CLS
         </button>

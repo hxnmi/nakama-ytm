@@ -17,7 +17,7 @@
 }
 
 .theme-light {
-  --bg: #f6f7f9;
+  --bg: #eeeeee;
   --bg-2: #eef1f5;
   --panel: #ffffff;
   --panel-2: #f7f8fb;
@@ -57,7 +57,7 @@ body {
   justify-content: space-between;
   padding: 0 12px;
   position: relative;
-  z-index: 10000;
+  z-index: 998;
 }
 
 .header-left {
@@ -154,7 +154,6 @@ body {
   padding: 12px;
   display: grid;
   gap: 10px;
-  z-index: 10010;
 }
 
 .clip-popover label {
@@ -463,6 +462,68 @@ body {
   font-size: 9px;
   padding: 0 6px;
   height: 20px;
+  margin-left: 0.5rem;
+  background: #e11d48;
+  color: white;
+}
+
+.ui-btn.tutorial-btn {
+  font-size: 9px;
+  padding: 0 6px;
+  height: 20px;
+}
+
+.toolbar {
+  position: fixed;
+  bottom: 95px;
+  right: 16px;
+  z-index: 9997;
+}
+
+/* ================= TUTORIAL/GUIDE ================= */
+.tutorial-box {
+  position: fixed;
+  width: min(300px, calc(100vw - 24px));
+  /* min-height: 170px; */
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, .35);
+  z-index: 10000;
+}
+
+.tutorial-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: auto;
+}
+
+.tutorial-highlight {
+  position: fixed;
+  border: 3px solid var(--text);
+  border-radius: 12px;
+  pointer-events: none;
+  box-shadow:
+    0 0 0 9999px rgba(0, 0, 0, .65),
+    0 0 20px rgba(255, 255, 255, .35);
+  animation: tutorialPulse 1.2s infinite;
+}
+
+@keyframes tutorialPulse {
+  0% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.03);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+
 }
 
 /* ================= FOOTER (UNCHANGED LOGIC) ================= */
@@ -595,7 +656,7 @@ body {
   position: fixed;
   top: 60px;
   right: 16px;
-  z-index: 9999;
+  z-index: 9997;
 }
 
 .notify {
@@ -1067,6 +1128,7 @@ select {
     min-width: 180px;
     max-width: 220px;
     padding: 10px;
+    z-index: 998;
   }
 
   .clip-popover label,

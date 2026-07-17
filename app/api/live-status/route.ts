@@ -26,6 +26,9 @@ type Streamer = {
     status: StreamStatus
     liveVideoId?: string
     concurrentViewers?: number
+    order?: number
+    enabled: boolean
+    groups: string[]
 }
 
 type ChannelState = {
@@ -40,6 +43,7 @@ type StreamerConfig = {
     channelId: string
     groups: string[]
     enabled: boolean
+    order?: number
 }
 async function getStreamers(): Promise<StreamerConfig[]> {
     const config =
@@ -226,7 +230,7 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
             stateMap[s.channelId] = {
                 ...state,
                 offlinePolls: 0,
-                lastActiveAt: Date.now(),
+                lastActiveAt: now,
                 lastKnownVideoId: hit
             }
             stateDirty = true
@@ -235,7 +239,7 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
             stateMap[s.channelId] = {
                 ...state,
                 offlinePolls: 0,
-                lastActiveAt: Date.now(),
+                lastActiveAt: now,
                 lastKnownVideoId: hit
             }
             stateDirty = true
@@ -248,7 +252,7 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
                 stateMap[s.channelId] = {
                     ...state,
                     offlinePolls: count,
-                    lastActiveAt: Date.now()
+                    lastActiveAt: now
                 }
 
                 stateDirty = true

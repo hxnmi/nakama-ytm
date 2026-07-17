@@ -24,7 +24,8 @@ export default function AdminPage() {
     const [channelId, setChannelId] = useState("")
 
     const [search, setSearch] = useState("")
-    const [sort, setSort] = useState<"order" | "az" | "za" | "group">("order")
+    const [sort, setSort] = useState<"az" | "za" | "group">("group")
+    const [orderInputs, setOrderInputs] = useState<Record<string, string>>({})
 
     const [isSmall, setIsVerySmall] = useState(false);
     const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
@@ -40,7 +41,9 @@ export default function AdminPage() {
                 if (!r.ok) throw new Error("unauthorized")
                 return r.json()
             })
-            .then(setConfig)
+            .then(data => {
+                setConfig(data)
+            })
             .catch(() => {
                 alert("Invalid admin token")
                 setToken(null)
@@ -68,16 +71,44 @@ export default function AdminPage() {
     ) {
         if (!config) return
 
-        const next = {
-            ...config,
-            streamers: config.streamers.map(s =>
-                s.channelId === channelId ? { ...s, ...patch } : s
-            ),
+        const oldStreamer = config.streamers.find(
+            s => s.channelId === channelId
+        )!
+
+        let streamers = config.streamers.map(s =>
+            s.channelId === channelId
+                ? { ...s, ...patch }
+                : s
+        )
+
+        if (patch.groups) {
+            const affected = [
+                oldStreamer.groups[0],
+                patch.groups[0],
+            ]
+
+            affected.forEach(group => {
+                const list = streamers
+                    .filter(s => s.groups[0] === group)
+                    .sort((a, b) => (a.order ?? 9999) - (b.order ?? 9999))
+
+                streamers = streamers.map(s => {
+                    if (s.groups[0] !== group) return s
+
+                    const index = list.findIndex(x => x.channelId === s.channelId)
+
+                    return index === -1
+                        ? s
+                        : { ...s, order: index + 1 }
+                })
+            })
         }
 
-        setConfig(next)
+        setConfig({ ...config, streamers })
 
-        const updated = next.streamers.find(s => s.channelId === channelId)!
+        const updated = streamers.find(
+            s => s.channelId === channelId
+        )!
         if (typeof patch.name === "string") {
             scheduleSave(updated)
             return
@@ -133,7 +164,9 @@ export default function AdminPage() {
         if (!channelId || !group || !config) return
         const maxOrder = Math.max(
             0,
-            ...config.streamers.map(s => s.order ?? 0)
+            ...config.streamers
+                .filter(s => s.groups[0] === group)
+                .map(s => s.order ?? 0)
         )
 
         await fetch("/api/streamers", {
@@ -183,54 +216,158 @@ export default function AdminPage() {
                 list.sort((a, b) => b.name.localeCompare(a.name))
                 break
             case "group":
-                list.sort((a, b) =>
-                    (a.groups[0] ?? "").localeCompare(b.groups[0] ?? "")
-                )
-                break
-            case "order":
             default:
-                list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+                {
+                    const groupOrder = ["A4A", "NMC", "EX"]
+
+                    list.sort((a, b) => {
+                        const ga = groupOrder.indexOf(a.groups[0] ?? "")
+                        const gb = groupOrder.indexOf(b.groups[0] ?? "")
+
+                        if (ga !== gb) return ga - gb
+
+                        return (a.order ?? 9999) - (b.order ?? 9999)
+                    })
+
+                    break
+                }
         }
 
         return list
     }
 
-    const moveUp = async (channelId: string) => {
-        if (!config) return
-        const ordered = [...config.streamers].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-        const index = ordered.findIndex(s => s.channelId === channelId)
-        if (index <= 0) return
+    async function changeOrder(channelId: string, newOrder: number) {
+        if (!config) return;
 
-        const swapped = [...ordered]
-        const temp = swapped[index - 1]
-        swapped[index - 1] = swapped[index]
-        swapped[index] = temp
+        const streamer = config.streamers.find(
+            s => s.channelId === channelId
+        );
 
-        const reordered = swapped.map((s, i) => ({ ...s, order: i + 1 }))
-        setConfig({ ...config, streamers: reordered })
+        if (!streamer) return;
 
-        await saveMany(
-            reordered.map(s => ({ channelId: s.channelId, order: s.order }))
-        )
+        const group = streamer.groups[0];
+
+        const groupStreamers = config.streamers
+            .filter(s => s.groups[0] === group)
+            .sort((a, b) => (a.order ?? 9999) - (b.order ?? 9999));
+
+        const originalGroup = groupStreamers.map(s => ({
+            channelId: s.channelId,
+            order: s.order,
+        }))
+
+        const others = config.streamers.filter(
+            s => s.groups[0] !== group
+        );
+
+        const currentIndex = groupStreamers.findIndex(
+            s => s.channelId === channelId
+        );
+
+        const moving = groupStreamers.splice(currentIndex, 1)[0];
+
+        const targetIndex = Math.max(
+            0,
+            Math.min(newOrder - 1, groupStreamers.length)
+        );
+
+        groupStreamers.splice(targetIndex, 0, moving);
+
+        const reorderedGroup = groupStreamers.map((s, i) => ({
+            ...s,
+            order: i + 1,
+        }));
+
+        setConfig(cfg => {
+            if (!cfg) return cfg
+
+            return {
+                ...cfg,
+                streamers: [...others, ...reorderedGroup],
+            }
+        })
+
+        const updates = reorderedGroup
+            .filter(s => {
+                const old = originalGroup.find(o => o.channelId === s.channelId)
+                return old?.order !== s.order
+            })
+            .map(s => ({
+                channelId: s.channelId,
+                order: s.order,
+            }))
+
+        console.log({
+            originalGroup,
+            reorderedGroup,
+            updates
+        })
+
+        await saveMany(updates)
     }
 
-    const moveDown = async (channelId: string) => {
+    async function changeGroup(channelId: string, newGroup: string) {
         if (!config) return
-        const ordered = [...config.streamers].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-        const index = ordered.findIndex(s => s.channelId === channelId)
-        if (index < 0 || index >= ordered.length - 1) return
 
-        const swapped = [...ordered]
-        const temp = swapped[index + 1]
-        swapped[index + 1] = swapped[index]
-        swapped[index] = temp
-
-        const reordered = swapped.map((s, i) => ({ ...s, order: i + 1 }))
-        setConfig({ ...config, streamers: reordered })
-
-        await saveMany(
-            reordered.map(s => ({ channelId: s.channelId, order: s.order }))
+        const streamer = config.streamers.find(
+            s => s.channelId === channelId
         )
+
+        if (!streamer) return
+
+        const oldGroup = streamer.groups[0]
+
+        if (oldGroup === newGroup) return
+
+        const oldList = config.streamers
+            .filter(s => s.groups[0] === oldGroup && s.channelId !== channelId)
+            .sort((a, b) => (a.order ?? 9999) - (b.order ?? 9999))
+            .map((s, i) => ({
+                ...s,
+                order: i + 1,
+            }))
+
+        const newList = config.streamers
+            .filter(s => s.groups[0] === newGroup)
+            .sort((a, b) => (a.order ?? 9999) - (b.order ?? 9999))
+
+        const moved = {
+            ...streamer,
+            groups: [newGroup],
+            order: newList.length + 1,
+        }
+
+        const reorderedNewList = [...newList, moved].map((s, i) => ({
+            ...s,
+            order: i + 1,
+        }))
+
+        const next = {
+            ...config,
+            streamers: [
+                ...config.streamers.filter(
+                    s =>
+                        s.groups[0] !== oldGroup &&
+                        s.groups[0] !== newGroup &&
+                        s.channelId !== channelId
+                ),
+                ...oldList,
+                ...reorderedNewList,
+            ],
+        }
+
+        setConfig(next)
+
+        await saveMany([
+            ...oldList.map(s => ({
+                channelId: s.channelId,
+                order: s.order,
+            })),
+            ...reorderedNewList.map(s => ({
+                channelId: s.channelId,
+                order: s.order,
+            })),
+        ])
     }
 
     useEffect(() => {
@@ -310,17 +447,11 @@ export default function AdminPage() {
                 />
 
                 <select value={sort} onChange={e => setSort(e.target.value as any)}>
-                    <option value="order">Manual order</option>
+                    <option value="group">Group</option>
                     <option value="az">Name A–Z</option>
                     <option value="za">Name Z–A</option>
-                    <option value="group">Group</option>
                 </select>
             </div>
-            {sort !== "order" && (
-                <div className="admin-hint">
-                    Sorting is active — switch to <b>Manual order</b> to use up/down buttons
-                </div>
-            )}
             <div className="admin-list">
                 {getVisibleStreamers().map(s => (
                     <div
@@ -350,7 +481,7 @@ export default function AdminPage() {
                                         name={`group-${s.channelId}`}
                                         checked={s.groups[0] === g}
                                         onChange={() =>
-                                            updateStreamer(s.channelId, { groups: [g] })
+                                            changeGroup(s.channelId, g)
                                         }
                                     />
                                     <span>{g}</span>
@@ -359,12 +490,28 @@ export default function AdminPage() {
                         </div>
 
                         <div className="admin-actions">
-                            {sort === "order" && (
-                                <>
-                                    <button className="move" onClick={() => moveUp(s.channelId)}>↑ Up</button>
-                                    <button className="move" onClick={() => moveDown(s.channelId)}>↓ Down</button>
-                                </>
-                            )}
+                            <input
+                                className="order-input"
+                                type="number"
+                                value={orderInputs[s.channelId] ?? String(s.order)}
+                                onChange={e => {
+                                    setOrderInputs(prev => ({
+                                        ...prev,
+                                        [s.channelId]: e.target.value,
+                                    }))
+                                }}
+                                onBlur={e => {
+                                    const value = Number(orderInputs[s.channelId])
+
+                                    changeOrder(s.channelId, value)
+
+                                    setOrderInputs(prev => {
+                                        const next = { ...prev }
+                                        delete next[s.channelId]
+                                        return next
+                                    })
+                                }}
+                            />
                             <label className="toggle">
                                 <input
                                     type="checkbox"

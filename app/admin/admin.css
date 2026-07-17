@@ -226,3 +226,13 @@
     opacity: 0.6;
     margin-bottom: 8px;
 }
+
+.order-input {
+    width: 50px;
+    text-align: center;
+    padding: 3px;
+    background: #262633;
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+}
