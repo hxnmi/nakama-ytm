@@ -48,8 +48,7 @@ type TutorialStep = {
   offsetX?: number;
   offsetY?: number;
   beforeShow?: () => void;
-  hideOnMobile?: boolean;
-  hideOnDesktop?: boolean;
+  afterShow?: () => void;
 };
 
 declare global {
@@ -1573,6 +1572,7 @@ export default function Page() {
         title: "Save clip",
         text: "Download the most recent buffered video using the selected clip length.",
         placement: "left",
+        afterShow: () => setClipMenuOpen(false)
       },
     ]
     if (viewport.w <= 900) {
@@ -1664,6 +1664,7 @@ export default function Page() {
           text: "Adjust how other streams sound while one streamer is focused.",
           placement: "bottom-right",
           beforeShow: () => setMobileMenuOpen(true),
+          afterShow: () => setMobileMenuOpen(false)
         },
       ];
 
@@ -1734,6 +1735,7 @@ export default function Page() {
   };
 
   const next = () => {
+    tutorialSteps[step].afterShow?.();
     if (step === tutorialSteps.length - 1) {
       closeTutorial();
     } else {
