@@ -48,6 +48,8 @@ type TutorialStep = {
   offsetX?: number;
   offsetY?: number;
   beforeShow?: () => void;
+  hideOnMobile?: boolean;
+  hideOnDesktop?: boolean;
 };
 
 declare global {
@@ -154,8 +156,9 @@ export default function Page() {
   const clipFocusedIdRef = useRef<string | null>(null)
   const clipMimeTypeRef = useRef<string | null>(null)
 
+  const isVerySmall = viewport.w < 364 || (viewport.w > 499 && viewport.w < 600)
+  const isSmall = viewport.w < 500
   const isMobile = viewport.w <= 768
-  const isVerySmall = viewport.w < 500
   const isCompactTitle = viewport.w < 1120
 
   /* ================= COMPUTED ================= */
@@ -972,7 +975,9 @@ export default function Page() {
     }
 
     if (clipRecorderRef.current?.state === "recording") {
-      clipFocusedIdRef.current = focusedId
+      if (!clipFocusedIdRef.current) {
+        clipFocusedIdRef.current = focusedId;
+      }
       return true
     }
 
@@ -1042,10 +1047,6 @@ export default function Page() {
       return
     }
 
-    if (clipFocusedIdRef.current !== focusedId) {
-      setClipError("Clip buffer belongs to a different focused stream.")
-      return
-    }
 
     if (clipRecorderRef.current?.state !== "recording") {
       const started = await startClipBuffer()
@@ -1464,82 +1465,268 @@ export default function Page() {
   }, [])
 
   //TUTORIAL/GUIDE
-  const tutorialSteps: TutorialStep[] = [
-    {
-      target: ".theme-btn",
-      title: "Theme",
-      text: "Switch between Dark and Light mode theme.",
-      placement: "bottom-left"
-    },
-    {
-      target: ".stream-input-combo",
-      title: "Custom Youtube Video",
-      text: "Paste any YouTube video link here. It can be a livestream or a regular video. It will be added to the list of dropdown options.",
-      placement: "bottom-left",
-    },
-    {
-      target: ".hashtag-btn",
-      title: "#imeroleplay",
-      text: "Discover livestreams using the hashtag.",
-      placement: "bottom-left",
-    },
-    {
-      target: ".theater-btn",
-      title: "Modes",
-      text: "Theater mode expands one of the video to a widescreen format. Default mode retains a standard layout.",
-      placement: "bottom-left",
-    },
-    {
-      target: ".volume-group",
-      title: "Global volume controls",
-      text: "Global audio setting. It allows you to adjust the volume of all active, simultaneously running sources at the same time using a single master slider.",
-      placement: "bottom-right",
-    },
-    {
-      target: ".group-streams",
-      title: "Streamer toggles",
-      text: "Enable or disable streamers here.",
-      offsetY: 55,
-      placement: "top-left",
-    },
-    {
-      target: ".stream-label.active", //need users to toggle focused
-      title: "Youtuber Name Label",
-      text: "Click this toggle button to isolate a single source. Locks the audio exclusively to that source, and unlock clip or exit focus at any time.",
-      placement: "top-left",
-      offsetY: -5,
-      beforeShow: () => {
-        if (focusedId) return;
+  const tutorialSteps = useMemo(() => {
+    const desktopTutorialSteps: TutorialStep[] = [
+      {
+        target: ".theme-btn",
+        title: "Theme switch",
+        text: "Switch between Dark and Light themes",
+        placement: "bottom-left"
+      },
+      {
+        target: ".stream-input-combo",
+        title: "Custom Youtube link",
+        text: "Paste a YouTube livestream or video link here. It will be added to the list of dropdown above.",
+        placement: "bottom-left",
+      },
+      {
+        target: ".hashtag-btn",
+        title: "Hashtag imeroleplay",
+        text: "Find livestreams using the #imeroleplay hashtag.",
+        placement: "bottom-left",
+      },
+      {
+        target: ".theater-btn",
+        title: "Layout mode",
+        text: "Switch between Default mode and Theater mode. Theater mode enlarges one stream into a widescreen view.",
+        placement: "bottom-left",
+      },
+      {
+        target: ".volume-group",
+        title: "Master volume",
+        text: "Adjust the volume of all active streams at the same time.",
+        placement: "bottom-right",
+      },
+      {
+        target: ".offline-toggle",
+        title: "Show offline streamers",
+        text: "Show or hide offline streamers in the streamer list footer.",
+        placement: "bottom-right",
+      },
+      {
+        target: ".chat-btn",
+        title: "Live chat",
+        text: "Open the chat for the selected stream. Available when one stream is selected, or with up to four streams in Default mode.",
+        placement: "bottom-right",
+      },
+      {
+        target: ".group-streams",
+        title: "Streamer toggle buttons",
+        text: "Enable or disable streamers here.",
+        offsetY: 55,
+        placement: "top-left",
+      },
+      {
+        target: ".stream-label.active",
+        title: "Focus a source",
+        text: "Select a source name label to hear only their audio. You can leave focus mode or save a clip at any time.",
+        placement: "top-left",
+        offsetY: -5,
+        beforeShow: () => {
+          if (focusedId) return;
 
-        const first = streams.find(s => s.enabled) ?? streams[0];
+          const first = streams.find(s => s.enabled) ?? streams[0];
 
-        if (!first) return;
+          if (!first) return;
 
-        if (!first.enabled) {
-          setStreams(prev =>
-            prev.map(s => ({
-              ...s,
-              enabled: s.channelId === first.channelId,
-            }))
-          );
+          if (!first.enabled) {
+            setStreams(prev =>
+              prev.map(s => ({
+                ...s,
+                enabled: s.channelId === first.channelId,
+              }))
+            );
+          }
+
+          setFocusedId(first.channelId);
         }
+      },
+      {
+        target: ".audio-focus-controls",
+        title: "Audio focus controls",
+        text: "Adjust how other streams sound while one streamer is focused.",
+        placement: "bottom-right",
+      },
+      {
+        target: ".clip-toggle",
+        title: "Clip recorder",
+        text: "Open the clip recorder to capture highlights from a stream.",
+        placement: "bottom-right",
+      },
+      {
+        target: ".clip-record",
+        title: "Start recording",
+        text: "Begin buffering the selected stream. Recording continues even after closing this menu.",
+        placement: "left",
+        beforeShow: setClipMenuOpen.bind(null, true),
+      },
 
-        setFocusedId(first.channelId);
+      {
+        target: ".clip-length",
+        title: "Clip length",
+        text: "Choose how much buffered video to include in the saved clip.",
+        placement: "left",
+      },
+
+      {
+        target: ".clip-save",
+        title: "Save clip",
+        text: "Download the most recent buffered video using the selected clip length.",
+        placement: "left",
+      },
+    ]
+    if (viewport.w <= 900) {
+      const mobileTutorialSteps: TutorialStep[] = [
+        {
+          target: ".theme-btn",
+          title: "Theme switch",
+          text: "Switch between Dark and Light themes",
+          placement: "bottom-left"
+        },
+        {
+          target: ".stream-input-combo",
+          title: "Custom Youtube link",
+          text: "Paste a YouTube livestream or video link here. It will be added to the list of dropdown above.",
+          placement: "bottom-left",
+        },
+        {
+          target: ".mobile-menu-button",
+          title: "Main Menu",
+          text: "Tap here to open the mobile controls.",
+          placement: "bottom",
+        },
+        {
+          target: ".chat-btn",
+          title: "Live chat",
+          text: "Open the chat for the selected stream. Available when one stream is selected, or with up to four streams in Default mode.",
+          placement: "bottom-right",
+        },
+        {
+          target: ".mobile-menu",
+          title: "Mobile Menu",
+          text: "Most controls are grouped inside this menu on smaller screens.",
+          placement: "top",
+          beforeShow: () => setMobileMenuOpen(true),
+        },
+        {
+          target: ".volume-group-mobile",
+          title: "Master volume",
+          text: "Adjust the volume of all active streams at the same time.",
+          placement: "bottom-right",
+        },
+        {
+          target: ".hashtag-btn-mobile",
+          title: "Hashtag imeroleplay",
+          text: "Find livestreams using the #imeroleplay hashtag.",
+          placement: "bottom-left",
+        },
+        {
+          target: ".offline-toggle-mobile",
+          title: "Show offline streamers",
+          text: "Show or hide offline streamers in the streamer list footer.",
+          placement: "bottom-right",
+        },
+        {
+          target: ".group-streams",
+          title: "Streamer toggle buttons",
+          text: "Enable or disable streamers here.",
+          offsetY: 55,
+          placement: "top-left",
+        },
+        {
+          target: ".stream-label.active",
+          title: "Focus a source",
+          text: "Select a source name label to hear only their audio. You can leave focus mode or save a clip at any time.",
+          placement: "top-left",
+          offsetY: -5,
+          beforeShow: () => {
+            if (focusedId) return;
+
+            const first = streams.find(s => s.enabled) ?? streams[0];
+
+            if (!first) return;
+
+            if (!first.enabled) {
+              setStreams(prev =>
+                prev.map(s => ({
+                  ...s,
+                  enabled: s.channelId === first.channelId,
+                }))
+              );
+            }
+
+            setFocusedId(first.channelId);
+          }
+        },
+        {
+          target: ".audio-focus-controls-mobile",
+          title: "Audio focus controls",
+          text: "Adjust how other streams sound while one streamer is focused.",
+          placement: "bottom-right",
+          beforeShow: () => setMobileMenuOpen(true),
+        },
+      ];
+
+      if (viewport.w < 500) {
+        mobileTutorialSteps.splice(1, 1, {
+          target: ".mobile-menu-button",
+          title: "Main Menu",
+          text: "Tap here to open the mobile controls.",
+          placement: "bottom",
+        });
+        mobileTutorialSteps.splice(2, 1, {
+          target: ".chat-btn",
+          title: "Live chat",
+          text: "Open the chat for the selected stream. Available when one stream is selected, or with up to four streams in Default mode.",
+          placement: "bottom-right",
+        });
+        mobileTutorialSteps.splice(3, 1, {
+          target: ".mobile-menu",
+          title: "Mobile Menu",
+          text: "Most controls are grouped inside this menu on smaller screens.",
+          placement: "top",
+          beforeShow: () => setMobileMenuOpen(true),
+        });
+        mobileTutorialSteps.splice(4, 1, {
+          target: ".stream-input-combo",
+          title: "Custom Youtube link",
+          text: "Paste a YouTube livestream or video link here. It will be added to the list of dropdown above.",
+          placement: "top",
+          beforeShow: () => setMobileMenuOpen(true),
+        });
+        mobileTutorialSteps.splice(9, 1, {
+          target: ".stream-label.active",
+          title: "Focus a source",
+          text: "Select a source name label to hear only their audio. You can leave focus mode or save a clip at any time.",
+          placement: "top-left",
+          offsetY: -5,
+          beforeShow: () => {
+            setMobileMenuOpen(false)
+            if (focusedId) return;
+
+            const first = streams.find(s => s.enabled) ?? streams[0];
+
+            if (!first) return;
+
+            if (!first.enabled) {
+              setStreams(prev =>
+                prev.map(s => ({
+                  ...s,
+                  enabled: s.channelId === first.channelId,
+                }))
+              );
+            }
+
+            setFocusedId(first.channelId);
+          }
+        });
       }
-    },
-    {
-      target: ".audio-focus-controls", //need users to toggle focused
-      title: "Audio Focus Controls",
-      text: "Audio focus mixing controls for focused sources. It activates when a specific user or audio source is highlighted/focused.",
-      placement: "bottom-right",
-    },
-    {
-      target: ".clip-toggle", //need users to toggle focused
-      title: "Clip Toggle",
-      text: "A clip toggle allows you to record your screen and save short highlights of your favorite moments.",
-      placement: "bottom-right",
-    },
-  ]
+
+      return mobileTutorialSteps;
+    }
+
+    return desktopTutorialSteps;
+  }, [viewport.w, streams, focusedId]);
 
   const closeTutorial = () => {
     setTutorialOpen(false);
@@ -1611,8 +1798,8 @@ export default function Page() {
 
     const isMobile = window.innerWidth < 768;
 
-    let left = rect.left;
-    let top = rect.bottom + GAP;
+    let left = rect.left + (isMobile ? 100 : 0);
+    let top = rect.bottom + GAP + (isMobile ? 100 : 0);
 
     if (!isMobile) {
       switch (step.placement) {
@@ -1672,7 +1859,7 @@ export default function Page() {
       );
     } else {
       left = PAD;
-      top = window.innerHeight - BOX_HEIGHT - PAD;
+      top = window.innerHeight - BOX_HEIGHT - PAD - 100;
     }
 
     return (
@@ -1735,10 +1922,10 @@ export default function Page() {
       return
     }
 
-    if (clipFocusedIdRef.current && clipFocusedIdRef.current !== focusedId) {
-      stopClipBuffer()
-      setClipMenuOpen(false)
-    }
+    // if (clipFocusedIdRef.current && clipFocusedIdRef.current !== focusedId) {
+    //   stopClipBuffer()
+    //   setClipMenuOpen(false)
+    // }
   }, [focusedId, focusedStream])
 
   /* ================= RENDER ================= */
@@ -1757,13 +1944,13 @@ export default function Page() {
               className="logo"
               draggable={false}
             />&nbsp;
-            <h1>{isCompactTitle ? "Nakama YTM" : "Nakama Youtube MultiView"}</h1>
+            <h1>{isMobile ? "Nakama YTM" : "Nakama Youtube MultiView"}</h1>
             <span className="tooltip">
               Created by hxnmi for nakama #NFFN
             </span>
           </div>
           <span className="live-count">
-            {isCompactTitle ? (
+            {isVerySmall ? (
               <span>
                 LIVE:<br />
                 {liveCount} / {streams.length}
@@ -1781,7 +1968,7 @@ export default function Page() {
           >
             {theme === "dark" ? "🌙 Dark" : "🌞 Light"}
           </button>
-          {!isVerySmall && (
+          {!isSmall && (
             <StreamInputCombo
               streamInput={streamInput}
               setStreamInput={setStreamInput}
@@ -1858,7 +2045,7 @@ export default function Page() {
             </div>
             <button
               onClick={() => setShowOffline(!showOffline)}
-              className={`ui-btn ${showOffline ? 'enabled' : 'disabled'}`}
+              className={`ui-btn ${showOffline ? 'enabled' : 'disabled'} offline-toggle`}
               style={{ background: showOffline ? '#e11d48' : 'var(--panel-2)', border: 'none', color: 'var(--text)', cursor: 'pointer' }}
             >
               {showOffline ? "Hide Offline" : "Show Offline"}
@@ -1875,11 +2062,8 @@ export default function Page() {
             <div className="clip-control">
               <button
                 className={`ui-btn clip-toggle ${clipRecorderRef.current?.state === "recording" ? "enabled" : ""}`}
-                onClick={async () => {
+                onClick={() => {
                   setClipMenuOpen(prev => !prev)
-                  if (clipRecorderRef.current?.state !== "recording") {
-                    await startClipBuffer()
-                  }
                 }}
                 title="Clip the focused live stream"
               >
@@ -1888,9 +2072,24 @@ export default function Page() {
 
               {clipMenuOpen && (
                 <div className="clip-popover" role="dialog" aria-label="Clip focused stream">
+                  <button
+                    className={`ui-btn clip-record ${clipRecorderRef.current?.state === "recording" ? "recording" : ""
+                      }`}
+                    onClick={() => {
+                      if (clipRecorderRef.current?.state === "recording") {
+                        stopClipBuffer();
+                      } else {
+                        startClipBuffer();
+                      }
+                    }}
+                  >
+                    {clipRecorderRef.current?.state === "recording"
+                      ? "⏹ Stop Recording"
+                      : "⏺ Record"}
+                  </button>
                   <label>
                     Length
-                    <select
+                    <select className="clip-length"
                       value={clipLengthMinutes}
                       onChange={(e) => setClipLengthMinutes(Number(e.target.value))}
                     >
@@ -1902,12 +2101,20 @@ export default function Page() {
                     </select>
                   </label>
 
-                  <button className="ui-btn clip-save" onClick={saveClip}>
+                  <button
+                    className="ui-btn clip-save"
+                    disabled={clipRecorderRef.current?.state !== "recording"}
+                    onClick={saveClip}
+                  >
                     Save clip
                   </button>
 
                   <div className="clip-hint">
-                    {clipStatus ?? "Capturing the focused stream in your browser."}
+                    {
+                      clipRecorderRef.current?.state === "recording"
+                        ? clipStatus
+                        : "Press Record to begin buffering."
+                    }
                   </div>
 
                   {clipError && <div className="clip-error">{clipError}</div>}
@@ -1923,9 +2130,9 @@ export default function Page() {
           <div className="mobile-menu-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
             <strong>Menu</strong>
           </div>
-
+          <hr />
           <div className="mobile-menu-content" style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {isVerySmall && (
+            {isSmall && (
               <>
                 <label>
                   Custom Live Stream
@@ -1943,7 +2150,7 @@ export default function Page() {
                 />
               </>
             )}
-            <div>
+            <div className="volume-group-mobile">
               <label style={{ display: 'block', marginBottom: 6 }}>Master volume</label>
               <input
                 type="range"
@@ -1956,12 +2163,13 @@ export default function Page() {
               />
             </div>
 
-            <div>
-              <label style={{ display: 'block', marginBottom: 6 }}>Audio behavior</label>
-              <select value={audioMode} onChange={(e) => setAudioMode(e.target.value as any)}>
-                <option value="mute">Mute others</option>
-                <option value="reduce">Reduce others</option>
-              </select>
+            <div className="audio-focus-controls-mobile">
+              <label style={{ display: 'flex', marginBottom: 6, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', flexDirection: 'row' }}>Audio behavior
+                <select value={audioMode} onChange={(e) => setAudioMode(e.target.value as any)}>
+                  <option value="mute">Mute others</option>
+                  <option value="reduce">Reduce others</option>
+                </select>
+              </label>
             </div>
 
             {audioMode === 'reduce' && (
@@ -1985,21 +2193,18 @@ export default function Page() {
                   setShowHashtagPanel(prev => !prev)
                   setMobileMenuOpen(false)
                 }}
-                className="ui-btn"
-                style={{ flex: 1 }}
+                className="ui-btn hashtag-btn-mobile"
               >
                 🔍 #imeroleplay
               </button>
-            </div>
-
-            <div className="mobile-menu-actions">
-              <button onClick={() => { setShowOffline(prev => !prev); setMobileMenuOpen(false); }} className={`ui-btn ${showOffline ? 'enabled' : 'disabled'}`} style={{ flex: 1 }}>
+              <button onClick={() => { setShowOffline(prev => !prev); setMobileMenuOpen(false); }} className={`ui-btn ${showOffline ? 'enabled' : 'disabled'} offline-toggle-mobile`} style={{ flex: 1 }}>
                 {showOffline ? "Hide Offline" : "Show Offline"}
               </button>
             </div>
           </div>
         </div>
-      )}
+      )
+      }
 
       <div className="content">
         {showHashtagPanel && (
@@ -2056,7 +2261,7 @@ export default function Page() {
             gridTemplateColumns,
             gridTemplateRows,
             marginLeft: showHashtagPanel ? 280 : 0,
-            transition: "margin-left 0.3s"
+            transition: "margin-left 0.3s",
           }}
         >
           {renderStreams.map(s => {

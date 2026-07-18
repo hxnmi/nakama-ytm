@@ -58,6 +58,7 @@ body {
   padding: 0 12px;
   position: relative;
   z-index: 998;
+  box-shadow: 0 -6px 100px var(--label);
 }
 
 .header-left {
@@ -191,6 +192,15 @@ body {
   color: #fca5a5;
 }
 
+.clip-record.recording {
+  background: #dc2626;
+  color: white;
+}
+
+.clip-record.recording:hover {
+  background: #b91c1c;
+}
+
 .desktop-controls {
   display: flex;
   gap: 12px;
@@ -238,6 +248,13 @@ body {
   align-content: stretch;
   position: relative;
   z-index: 1;
+  background: linear-gradient(color-mix(in srgb, var(--bg) 75%, transparent),
+      color-mix(in srgb, var(--bg-2) 75%, transparent)),
+    url('https://media.discordapp.net/attachments/342322404221255680/1527982785867022359/5w23994.png?ex=6a5ca45c&is=6a5b52dc&hm=23e44f0d89ca2135797ba5eaa280396194f6b03e23eb542031f1535bf9f0ab1c&=&format=webp&quality=lossless&width=1161&height=653');
+
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 .chat-column {
@@ -538,7 +555,7 @@ body {
   background: var(--panel);
   border-top: 1px solid var(--border);
   padding: 6px 12px;
-  box-shadow: 0 -6px 24px var(--label);
+  box-shadow: 0 -6px 100px var(--label);
   z-index: 998;
 }
 
@@ -972,13 +989,8 @@ select {
     gap: 5px
   }
 
-  .live-count {
-    max-width: 70px;
-    white-space: nowrap;
-  }
-
   .header h1 {
-    font-size: clamp(12px, 2.2vw, 16px);
+    font-size: clamp(14px, 2.2vw, 16px);
     line-height: 1.2;
     min-width: 0;
     overflow: hidden;
@@ -987,44 +999,109 @@ select {
 
   .live-count {
     font-size: 10px;
+    max-width: 70px;
+    white-space: nowrap;
   }
 }
 
 @media (max-width: 900px) {
   .mobile-menu {
     position: fixed;
-    background: var(--bg-2);
-    z-index: 999;
-    top: 52px;
-    left: 0;
-    right: 0;
+    top: 56px;
+    right: 12px;
+    width: min(340px, calc(100vw - 24px));
+    max-height: calc(100vh - 72px);
+
+    overflow-y: auto;
 
     background: var(--panel);
-    border-bottom: 1px solid var(--border);
-    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+
+    padding: 18px;
+
+    box-shadow:
+      0 12px 40px rgba(0, 0, 0, .45),
+      0 2px 8px rgba(0, 0, 0, .25);
+
+    z-index: 5000;
   }
 
-  .mobile-menu-header,
+  .mobile-menu-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .mobile-menu-header strong {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .mobile-menu hr {
+    border: none;
+    height: 1px;
+    background: var(--text);
+    margin: 12px 0 18px;
+  }
+
+  .mobile-menu label {
+    color: var(--text);
+  }
+
   .mobile-menu-content {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  /* Each section */
+
+  .mobile-menu-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .mobile-menu-section label {
+    font-size: .9rem;
+    font-weight: 600;
     color: var(--text);
   }
 
-  .mobile-menu-actions button {
-    padding: 6px 82px 6px 8px;
-    border-radius: 6px;
-    background: var(--bg);
-    color: var(--text);
-    box-sizing: border-box;
-  }
+  /* Inputs */
 
-  .mobile-menu select,
   .mobile-menu input[type="range"] {
-    padding: 6px 8px;
-    border-radius: 6px;
-    background: var(--bg);
-    color: var(--text);
     width: 100%;
-    box-sizing: border-box;
+  }
+
+  /* Buttons */
+
+  .mobile-menu-actions {
+    display: flex;
+  }
+
+  .mobile-menu .ui-btn {
+    width: 50%;
+    height: 42px;
+    margin: 5px;
+    border-radius: 10px;
+    font-weight: 600;
+    transition: .15s;
+    background: var(--panel-2);
+  }
+
+  .mobile-menu .ui-btn:hover {
+    transform: translateY(-1px);
+  }
+
+  /* Optional little divider */
+
+  .mobile-menu-divider {
+    height: 1px;
+    background: var(--bg);
   }
 
   .mobile-chat {
@@ -1056,7 +1133,7 @@ select {
   }
 
   .header h1 {
-    font-size: 10px;
+    font-size: 14px;
   }
 
   .live-count {
@@ -1198,7 +1275,7 @@ select {
 
   .header h1 {
     margin-right: unset;
-    font-size: 11px;
+    font-size: 14px;
     padding-right: 3px;
   }
 
@@ -1226,5 +1303,13 @@ select {
     left: 0;
     right: 0;
     z-index: 998;
+  }
+}
+
+@media (max-width: 425px) {
+  .header h1 {
+    margin-right: unset;
+    font-size: 11px;
+    padding-right: 3px;
   }
 }
