@@ -6,12 +6,13 @@ export const dynamic = 'force-dynamic'
 
 /* ================= CONFIG ================= */
 const API_KEY = process.env.YT_API_KEY!
-const FAST_TTL = 30 * 1000
+const FAST_TTL = 90 * 1000
 const NORMAL_TTL = 2 * 60 * 1000
 const DEPTH_STEPS = [3]
 const OFFLINE_CONFIRM_POLLS = 3
 const ACTIVE_WINDOW_MS = 15 * 60 * 1000
 const CHANNEL_STATE_KEY = "channel:states"
+const LIVE_CACHE_KEY = "live-status:cache"
 
 /* ================= TYPES ================= */
 export type StreamStatus =
@@ -56,9 +57,9 @@ async function getStreamers(): Promise<StreamerConfig[]> {
 
 
 /* ================= MEMORY ================= */
-let cache: Streamer[] | null = null
-let cacheTime = 0
-let inflight: Promise<Streamer[]> | null = null
+// let cache: Streamer[] | null = null
+// let cacheTime = 0
+// let inflight: Promise<Streamer[]> | null = null
 
 /* ================= HELPERS ================= */
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -109,7 +110,11 @@ async function fetchRssFeed(
 }> {
     const res = await fetch(
         `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`,
-        { cache: "no-store" }
+        {
+            next: {
+                revalidate: 60,
+            },
+        }
     )
     if (!res.ok) return { videoIds: [] }
 
@@ -187,6 +192,14 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
     )
 
     const chunks = chunk(allVideoIds, 50)
+    console.log(
+        `[YT] ${new Date().toISOString()} | streamers=${STREAMERS.length}`
+    )
+
+    console.log(
+        `[YT] videoIds=${allVideoIds.length}, chunks=${chunks.length}`
+    )
+
     const videoInfo = new Map<
         string,
         { status: StreamStatus; viewers?: number }
@@ -317,30 +330,58 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
 
 function getTTL(cache: Streamer[] | null) {
     if (!cache) return NORMAL_TTL
-    return cache.some(s => s.status === "live" || s.status === "waiting")
+
+    return cache.some(
+        s => s.status === "live" || s.status === "waiting"
+    )
         ? FAST_TTL
         : NORMAL_TTL
 }
 
 export async function GET() {
-    const now = Date.now()
-    const ttl = getTTL(cache)
+    const cache = await kv.get<Streamer[]>(LIVE_CACHE_KEY)
 
-    if (cache && now - cacheTime < ttl) {
+    if (cache) {
+        console.log("[YT] cache hit")
         return NextResponse.json(cache)
+    } else
+        console.log("[YT] cache miss")
+
+    const lock = await kv.set("live-status:lock", "1", {
+        nx: true,
+        ex: 20,
+    })
+
+    if (!lock) {
+        for (let i = 0; i < 5; i++) {
+            await new Promise(r => setTimeout(r, 500))
+
+            const cache = await kv.get<Streamer[]>(LIVE_CACHE_KEY)
+
+            if (cache) {
+                return NextResponse.json(cache)
+            }
+        }
+
+        return NextResponse.json(
+            { error: "Cache warming" },
+            { status: 503 }
+        )
     }
 
-    if (!inflight) {
-        inflight = fetchLiveStatus()
-            .then(res => {
-                cache = res
-                cacheTime = Date.now()
-                return res
-            })
-            .finally(() => {
-                inflight = null
-            })
-    }
+    try {
+        const result = await fetchLiveStatus()
 
-    return NextResponse.json(await inflight)
+        await kv.set(
+            LIVE_CACHE_KEY,
+            result,
+            {
+                ex: Math.ceil(getTTL(result) / 1000),
+            }
+        )
+
+        return NextResponse.json(result)
+    } finally {
+        await kv.del("live-status:lock")
+    }
 }
