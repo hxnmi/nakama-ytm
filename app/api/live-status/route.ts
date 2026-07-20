@@ -8,9 +8,10 @@ export const dynamic = 'force-dynamic'
 const API_KEY = process.env.YT_API_KEY!
 const FAST_TTL = 90 * 1000
 const NORMAL_TTL = 2 * 60 * 1000
-const DEPTH_STEPS = [3]
+const DEPTH_STEPS = [3, 1]
 const OFFLINE_CONFIRM_POLLS = 3
 const ACTIVE_WINDOW_MS = 15 * 60 * 1000
+const RSS_GRACE_MS = 2 * 60 * 1000
 const CHANNEL_STATE_KEY = "channel:states"
 const LIVE_CACHE_KEY = "live-status:cache"
 
@@ -161,7 +162,7 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
         const depths =
             now - lastActive < ACTIVE_WINDOW_MS
                 ? DEPTH_STEPS
-                : [3]
+                : [1]
 
         for (const depth of depths) {
             const rss = await fetchRssFeed(s.channelId, depth)
@@ -179,7 +180,8 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
 
             if (
                 state.lastKnownVideoId &&
-                (state.offlinePolls ?? 0) < OFFLINE_CONFIRM_POLLS
+                state.lastActiveAt &&
+                now - state.lastActiveAt < RSS_GRACE_MS
             ) {
                 channelCandidates.set(s.channelId, [state.lastKnownVideoId])
                 break

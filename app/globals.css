@@ -250,7 +250,7 @@ body {
   z-index: 1;
   background: linear-gradient(color-mix(in srgb, var(--bg) 75%, transparent),
       color-mix(in srgb, var(--bg-2) 75%, transparent)),
-    url('https://cdn.discordapp.com/attachments/1420903251787911299/1430460531503796254/FULL-LOGO-NMC.png?ex=6a5d27ef&is=6a5bd66f&hm=816bd36e53d89bbc83d5d59d11802b329384ab11591694e8846e5f93cb5b3ff9');
+    url('/FULL-LOGO-NMC.png');
 
   background-size: cover;
   background-position: center;

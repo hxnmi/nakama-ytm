@@ -1629,7 +1629,7 @@ export default function Page() {
         {
           target: ".group-streams",
           title: "Streamer toggle buttons",
-          text: "Enable or disable streamers here.",
+          text: "Enable or disable streamers here. You can toggle youtuber that are offline as well.",
           offsetY: 55,
           placement: "top-left",
         },
