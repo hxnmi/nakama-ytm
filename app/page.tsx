@@ -1463,7 +1463,7 @@ export default function Page() {
     return () => window.removeEventListener("resize", update)
   }, [])
 
-  //TUTORIAL/GUIDE
+  /* ================= TUTORIAL ================= */
   const tutorialSteps = useMemo(() => {
     const desktopTutorialSteps: TutorialStep[] = [
       {

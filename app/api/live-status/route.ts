@@ -8,7 +8,9 @@ export const dynamic = 'force-dynamic'
 const API_KEY = process.env.YT_API_KEY!
 const FAST_TTL = 90 * 1000
 const NORMAL_TTL = 2 * 60 * 1000
-const DEPTH_STEPS = [3, 1]
+const RECENT_RSS_RETRIES = 3
+const RECENT_RSS_DEPTH = 3
+const INACTIVE_RSS_DEPTH = 2
 const OFFLINE_CONFIRM_POLLS = 3
 const ACTIVE_WINDOW_MS = 15 * 60 * 1000
 const RSS_GRACE_MS = 2 * 60 * 1000
@@ -55,12 +57,6 @@ async function getStreamers(): Promise<StreamerConfig[]> {
 
     return config.streamers.filter(s => s.enabled)
 }
-
-
-/* ================= MEMORY ================= */
-// let cache: Streamer[] | null = null
-// let cacheTime = 0
-// let inflight: Promise<Streamer[]> | null = null
 
 /* ================= HELPERS ================= */
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -159,12 +155,18 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
             return
         }
 
-        const depths =
+        const isRecentlyActive =
             now - lastActive < ACTIVE_WINDOW_MS
-                ? DEPTH_STEPS
-                : [1]
 
-        for (const depth of depths) {
+        const retries = isRecentlyActive
+            ? RECENT_RSS_RETRIES
+            : 1
+
+        const depth = isRecentlyActive
+            ? RECENT_RSS_DEPTH
+            : INACTIVE_RSS_DEPTH
+
+        for (let attempt = 1; attempt <= retries; attempt++) {
             const rss = await fetchRssFeed(s.channelId, depth)
             const vids = rss.videoIds
 
@@ -173,7 +175,11 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
                 nameUpdates.set(s.channelId, rss.channelName)
             }
 
-            if (vids.length) {
+            console.log(
+                `[RSS] ${s.name} attempt=${attempt}/${retries} depth=${depth} videos=${vids.length}`
+            )
+
+            if (vids.length > 0) {
                 channelCandidates.set(s.channelId, vids)
                 break
             }
@@ -185,6 +191,10 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
             ) {
                 channelCandidates.set(s.channelId, [state.lastKnownVideoId])
                 break
+            }
+
+            if (attempt < retries) {
+                await new Promise(r => setTimeout(r, 300))
             }
         }
     })
