@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { XMLParser } from "fast-xml-parser"
 import { kv } from "@vercel/kv"
+import { Innertube } from "youtubei.js"
 
 export const dynamic = 'force-dynamic'
 
@@ -96,6 +97,16 @@ async function setAllStates(states: ChannelStateMap) {
     await kv.set(CHANNEL_STATE_KEY, states, { ex: 60 * 60 * 24 })
 }
 
+let yt: Innertube | null = null
+
+async function getYT() {
+    if (!yt) {
+        yt = await Innertube.create()
+    }
+
+    return yt
+}
+
 
 /* ================= RSS ================= */
 async function fetchRssFeed(
@@ -134,6 +145,45 @@ async function fetchRssFeed(
     }
 }
 
+/* ================= INNER-TUBE ================= */
+async function fetchInnerTubeFeed(
+    channelId: string,
+    limit = 3
+): Promise<{
+    videoIds: string[]
+    channelName?: string
+}> {
+    try {
+        const yt = await getYT()
+        const channel = await yt.getChannel(channelId)
+
+        let feed = channel
+
+        // Prefer Live tab if the channel has one
+        if (channel.has_live_streams) {
+            feed = await channel.getLiveStreams()
+        } else if (channel.has_videos) {
+            feed = await channel.getVideos()
+        }
+
+        const ids = feed.videos
+            .map((v: any) => v.id)
+            .filter(Boolean)
+            .slice(0, limit)
+
+        return {
+            videoIds: ids,
+            channelName: feed.title
+        }
+    } catch (err) {
+        console.error("[InnerTube]", channelId, err)
+
+        return {
+            videoIds: []
+        }
+    }
+}
+
 /* ================= CORE ================= */
 async function fetchLiveStatus(): Promise<Streamer[]> {
     const STREAMERS = await getStreamers()
@@ -167,7 +217,18 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
             : INACTIVE_RSS_DEPTH
 
         for (let attempt = 1; attempt <= retries; attempt++) {
-            const rss = await fetchRssFeed(s.channelId, depth)
+            let rss = await fetchRssFeed(s.channelId, depth)
+
+            if (rss.videoIds.length === 0) {
+                console.log(`[InnerTube] fallback ${s.name}`)
+
+                const inner = await fetchInnerTubeFeed(s.channelId, depth)
+
+                if (inner.videoIds.length > 0) {
+                    rss = inner
+                }
+            }
+
             const vids = rss.videoIds
 
             if (rss.channelName && rss.channelName !== s.name) {
