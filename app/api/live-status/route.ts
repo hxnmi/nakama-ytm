@@ -11,7 +11,7 @@ const FAST_TTL = 90 * 1000
 const NORMAL_TTL = 2 * 60 * 1000
 const RECENT_RSS_RETRIES = 3
 const RECENT_RSS_DEPTH = 3
-const INACTIVE_RSS_DEPTH = 2
+const INACTIVE_RSS_DEPTH = 1
 const OFFLINE_CONFIRM_POLLS = 3
 const ACTIVE_WINDOW_MS = 15 * 60 * 1000
 const RSS_GRACE_MS = 2 * 60 * 1000
@@ -148,7 +148,7 @@ async function fetchRssFeed(
 /* ================= INNER-TUBE ================= */
 async function fetchInnerTubeFeed(
     channelId: string,
-    limit = 3
+    limit = 5
 ): Promise<{
     videoIds: string[]
     channelName?: string
@@ -217,19 +217,8 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
             : INACTIVE_RSS_DEPTH
 
         for (let attempt = 1; attempt <= retries; attempt++) {
-            let rss = await fetchRssFeed(s.channelId, depth)
-
-            if (rss.videoIds.length === 0) {
-                console.log(`[InnerTube] fallback ${s.name}`)
-
-                const inner = await fetchInnerTubeFeed(s.channelId, depth)
-
-                if (inner.videoIds.length > 0) {
-                    rss = inner
-                }
-            }
-
-            const vids = rss.videoIds
+            const rss = await fetchRssFeed(s.channelId, depth)
+            let vids = rss.videoIds
 
             if (rss.channelName && rss.channelName !== s.name) {
                 s.name = rss.channelName
@@ -239,6 +228,26 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
             console.log(
                 `[RSS] ${s.name} attempt=${attempt}/${retries} depth=${depth} videos=${vids.length}`
             )
+
+            if (
+                attempt === 1 &&
+                isRecentlyActive &&
+                vids.length < depth
+            ) {
+                console.log(`[InnerTube] merge ${s.name}`)
+
+                const inner = await fetchInnerTubeFeed(s.channelId, Math.max(5, depth + 2))
+
+                if (inner.channelName && inner.channelName !== s.name) {
+                    s.name = inner.channelName
+                    nameUpdates.set(s.channelId, inner.channelName)
+                }
+
+                vids = [...new Set([
+                    ...vids,
+                    ...inner.videoIds
+                ])]
+            }
 
             if (vids.length > 0) {
                 channelCandidates.set(s.channelId, vids)
@@ -301,7 +310,8 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
         }
     }
 
-    const result = STREAMERS.map(s => {
+    const result: Streamer[] = []
+    for (const s of STREAMERS) {
         const state = stateMap[s.channelId] ?? {}
         const vids = channelCandidates.get(s.channelId) ?? []
         const liveHit = vids.find(v => videoInfo.get(v)?.status === "live")
@@ -363,15 +373,15 @@ async function fetchLiveStatus(): Promise<Streamer[]> {
             }
         }
 
-        return {
+        result.push({
             ...s,
             status,
             liveVideoId:
                 hit ??
                 state.lastKnownVideoId,
             concurrentViewers: info?.viewers,
-        }
-    })
+        })
+    }
 
     try {
         if (nameUpdates.size > 0) {
